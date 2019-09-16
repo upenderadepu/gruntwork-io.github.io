@@ -10,11 +10,11 @@ custom_js:
   <div class="container-fluid">
       <div class="post-detail">
         <div class="col-md-2-5">
-          <div id="toc">
+          <nav id="toc">
               {% toc %} {{page.document | tocify_asciidoc}}
-          </div>
+          </nav>
         </div>
-        <div class="col-md-7 guides-section-white" id="post-details">
+        <div class="col-md-7 guides-section-white" id="post-details" data-spy="scroll" data-target="#toc" data-offset="0">
           <ol class="breadcrumb text-center">
             {% assign crumbs = page.url | split: '/' %}
             <a href="/guides" ga-event-category="guide-{{ post.title | downcase}}" ga-event-action="deployment-guides">Production Deployment Guides</a> 

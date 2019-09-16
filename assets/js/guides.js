@@ -2,10 +2,10 @@ $(document).ready(function () {
 
   $('#toc ul li').addClass('nav-item');
   $('#toc ul a').addClass('nav-link');
-  $('#toc ul a').first().addClass("active");
+  // $('#toc ul a').first().addClass("active");
 
 
-  $('#detail-page').scrollspy({ target: '#toc' });
+  // $('#detail-page').scrollspy({ target: '#toc' });
 
   // //Toggle ToC children
   // $('#toc .sectlevel1 li').click((e) => {
