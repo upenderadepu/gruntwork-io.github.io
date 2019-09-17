@@ -1180,7 +1180,7 @@ body .guides .guides-section-white {
     display: block;
     z-index: 2;
     width: 100%;
-    margin-top: 28em;
+    margin-top: 15em;
     padding: 1em 0.3em 1.8em 0.3em;
     overflow-y: auto;
     max-height: 100vh;
@@ -1239,9 +1239,12 @@ body .guides .guides-section-white {
       list-style-type: disc;
       color: @guides-primary-color;
     }
-    & li:hover {
-      color: @guides-primary-color;
-      list-style-type: disc !important;
+    li {
+      padding-bottom: 20px;
+      &:hover {
+        color: @guides-primary-color;
+        list-style-type: disc !important;
+      }
     }
   }
 }

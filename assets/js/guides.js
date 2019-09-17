@@ -14,13 +14,14 @@ $(document).ready(function () {
     } else {
       sidebar = $('#listings-category');
     }
-    let sidebarTop = $('.navbar-default').innerHeight();
+    let listingsTop = $('.cloud-filter').outerHeight();
+    let detailTop = $('.post-content').innerHeight();
     let contentHeight = $('.guides-section-white').innerHeight();
     let sidebarHeight = sidebar.height();
     let sidebarBottomPos = contentHeight - sidebarHeight
-    let trigger = $(window).scrollTop() - sidebarTop;
+    let trigger = $(window).scrollTop() - listingsTop || $(window).scrollTop() - detailTop;
 
-    if (trigger >= sidebarTop) {
+    if (trigger >= listingsTop || trigger >= detailTop) {
       sidebar.addClass('fixed');
     } else {
       sidebar.removeClass('fixed');

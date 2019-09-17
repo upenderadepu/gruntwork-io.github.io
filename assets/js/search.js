@@ -137,8 +137,8 @@
     categoryArr.each(function () {
       let category = $(this).text().toLowerCase();
       if (entry.category === category) {
-        $(`.categories ul #${category}`).show();
-        $(`#${category}-1.category-head`).show();
+        $(`.categories ul li.${category}`).show();
+        $(`#${category}.category-head`).show();
       }
     });
   }
