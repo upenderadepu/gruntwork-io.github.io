@@ -109,4 +109,10 @@ $(document).ready(function () {
 
   $(window).scroll(scrollSpy);
   $(scrollSpy);
+
+  //To show intercom on guides pages
+  setTimeout(function () { 
+    Intercom('show'); 
+  }, 30000 );
+  
 });
