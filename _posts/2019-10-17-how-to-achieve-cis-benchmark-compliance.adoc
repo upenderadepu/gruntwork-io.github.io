@@ -27,7 +27,10 @@ endif::[]
 This is a complete guide to help you achieve compliance with the
 link:https://www.cisecurity.org/benchmark/amazon_web_services/[CIS AWS Foundations Benchmark]. By following this guide,
 you can launch infrastructure that is compliant with the Benchmark recommendations, and you'll be set to retain a
-compliant state over time because all of the infrastructure is defined as code. This guide targets version 1.2.0 of the Benchmark.
+compliant state over time because all of the infrastructure is defined as code. This guide targets version 1.3.0 of the Benchmark.
+
+NOTE: Previously, we supported version 1.2.0 of the Benchmark. If you are looking to upgrade from v1.2.0 to v1.3.0,
+please follow link:/guides/upgrades/how-to-update-to-cis-13/[the upgrade guide] instead.
 
 image:/assets/img/guides/cis-compliance/cis-account-architecture.png[CIS Benchmark Architecture]
 
@@ -53,7 +56,7 @@ This guide consists of five main sections:
   Gruntwork CIS AWS Foundations Benchmark wrapper modules.
 
 <<next_steps>>::
-  How to measure and maintain compliance
+  How to measure and maintain compliance.
 
 <<traceability_matrix>>::
   A reference table that maps each Benchmark recommendation to the corresponding section in the deployment
@@ -65,11 +68,12 @@ Feel free to read the guide from start to finish or skip around to whatever part
 [[core_concepts]]
 == Core concepts
 
-The CIS AWS Foundations Benchmark is organized into four sections:
+The CIS AWS Foundations Benchmark is organized into the following sections:
  +
  +
 
 . Identity and Access Management
+. Storage
 . Logging
 . Monitoring
 . Networking
@@ -81,11 +85,10 @@ link:https://www.pcisecuritystandards.org/[PCI DSS] for the payment card industr
 link:https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html[HIPAA] for covered
 health care entities.
 
-=== Scoring
-Each recommendation is classified as either _Scored_ or _Not Scored_. _Scored_ recommendations indicate that
+=== Assessment Status
+Each recommendation is classified as either _Automated_ or _Manual_. _Automated_ recommendations indicate that
 the check for the recommendation may be accessed programmatically (e.g., an API exists to validate or enable
-the recommendation). _Not Scored_ recommendations must be checked and remediated manually. To reach
-compliance, each scored item must pass an audit.
+the recommendation). _Manual_ recommendations must be checked and remediated manually.
 
 === Profiles
 The Benchmark defines two profile levels. Level one recommendations are easier to implement, incur less
@@ -114,14 +117,21 @@ link:https://aws.amazon.com/iam/[eponymous IAM service]. Hence, most (but not al
 this section discuss particular IAM configurations, such as the configuration of the password policy, the use
 of various groups and roles, and the configuration of multi-factor authentication (MFA) devices.
 
+==== Storage
+_Number of recommendations: 3_
+
+This section was added in the version 1.3.0 and involves the use of storage capabilities of AWS. The relevant
+services for this section are link:https://aws.amazon.com/s3/[S3] and link:https://aws.amazon.com/ec2/[EC2]. The
+recommendations in this section pertain to in-transit and at-rest encryption.
+
 ==== Logging
-_Number of recommendations: 9_
+_Number of recommendations: 11_
 
 AWS has a variety of logging, monitoring, and auditing features, and the Benchmark has recommendations for
 several of them:
 
-* link:https://aws.amazon.com/cloudtrail/[AWS CloudTrail] tracks user activity and API usage
-* link:https://aws.amazon.com/config/[AWS Config] records and evaluates resource configurations
+* link:https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html[AWS CloudTrail] tracks user activity and API usage
+* link:https://docs.aws.amazon.com/config/latest/developerguide/WhatIsConfig.html[AWS Config] records and evaluates resource configurations
 * link:https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html[VPC Flow Logs] capture network traffic information
   in VPCs
 
@@ -131,7 +141,7 @@ Logs], is integrated with many other AWS services. The Benchmark does not contai
 specifically for CloudWatch Logs, though many recommendations do make mention of it.
 
 ==== Monitoring
-_Number of recommendations: 14_
+_Number of recommendations: 15_
 
 Monitoring is an overloaded term in the industry. In the context of the AWS Foundations Benchmark, the
 monitoring section is exclusively about monitoring for specific API calls using the CloudTrail service paired
@@ -172,13 +182,15 @@ The first section of the Benchmark centers on Identity and Access Management, in
 * Disabling administrative permissions
 * Limiting the use of API access keys
 * Using IAM roles
+* Removing expired SSL/TLS certificates
+* Enabling IAM Access Analyzer
 
 In the subsequent sections, we'll review the recommendations and discuss how to implement them using Terraform resources and data sources.
 
 [[configure_authentication]]
 ==== Configure authentication
 One of main areas of concern in the IAM section relates to authentication. The Benchmark has recommendations for IAM
-users and the root user account, password complexity, and multi-factor authentication. There is more than one way to
+users and the root user account, password policy, and multi-factor authentication. There is more than one way to
 authenticate to AWS, and the method you choose determines how to implement these recommendations in your code.
 
 ===== Federated authentication using SAML
@@ -186,8 +198,8 @@ Perhaps the most robust and secure method for authenticating to AWS is to use
 link:https://aws.amazon.com/identity/saml/[federated SAML authentication] with an identity provider (IdP) like Okta,
 Google, or Active Directory. In this configuration, users authenticate to the IdP and assume IAM roles to obtain
 permissions in AWS. All user management is handled in the IdP, where you can assign roles to users according to their
-needs. If you use this approach, several of the Benchmark recommendations, including recommendations 1.2,
-1.16, and 1.21, are not applicable (assuming you have no IAM users at all).
+needs. If you use this approach, several of the Benchmark recommendations, including recommendations 1.10,
+1.15, and 1.11, are not applicable (assuming you have no IAM users at all).
 
 Configuring SAML is a multi-step process that is outside the scope of this guide. Familiarize yourself with the
 process by reviewing the link:https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_saml.html[AWS
@@ -207,10 +219,10 @@ A few tips on creating IAM users with Terraform:
 * To create IAM users, use the link:https://www.terraform.io/docs/providers/aws/r/iam_user.html[`aws_iam_user`] and
 link:https://www.terraform.io/docs/providers/aws/r/iam_user_login_profile.html[`aws_iam_user_login_profile`] resources.
 
-* As instructed by recommendation 1.21, do not create API access keys for new users automatically. The intent is that
+* As instructed by recommendation 1.11, do not create API access keys for new users automatically. The intent is that
 users should create them on their own if and when needed.
 
-* To stay compliant with recommendation 1.16, be sure to never attach IAM policies directly to IAM users. Instead, create IAM groups, attach policies to those groups, and add the user to groups using the link:https://www.terraform.io/docs/providers/aws/r/iam_user_group_membership.html[`aws_iam_user_group_membership`]. This helps to avoid scenarios where auditing the exact permissions of IAM users becomes difficult and unmaintainable.
+* To stay compliant with recommendation 1.15, be sure to never attach IAM policies directly to IAM users. Instead, create IAM groups, attach policies to those groups, and add the user to groups using the link:https://www.terraform.io/docs/providers/aws/r/iam_user_group_membership.html[`aws_iam_user_group_membership`]. This helps to avoid scenarios where auditing the exact permissions of IAM users becomes difficult and unmaintainable.
 
 Consider the following example which creates a user with access to AWS Support:
 
@@ -239,18 +251,18 @@ resource "aws_iam_user_group_membership" "example" {
 This code creates an IAM user called `support`, adds them to a new group called `support-group`, and attaches the
 `AWSSupportAccess` managed policy to the group. It demonstrates how to meet a few of the Benchmark recommendations:
 
-1. The user is created without an API access key (recommendation 1.21). Access keys should only be created by the user later.
-2. The policy is attached to an IAM group, not directly to the IAM user (recommendation 1.16).
-3. Recommendation 1.20 specifically requires that the Support policy be used. You can attach it either to a group, as
-shown here, or to an IAM role.
+1. The user is created without an API access key (recommendation 1.11). Access keys should only be created by the user later.
+2. The policy is attached to an IAM group, not directly to the IAM user (recommendation 1.15).
+3. Recommendation 1.17 specifically requires that the Support policy be used. You should attach it to a group, as
+shown here.
 
 ==== Do not use full administrator privileges
-Recommendation 1.22 states that no IAM policies with full administrator privileges be assigned. However, some
+Recommendation 1.16 states that no IAM policies with full administrator privileges be assigned. However, some
 administrator access is needed to maintain the account on an ongoing basis, and use of the root account is also
 prohibited. What to do?
 
-One approach is to create an IAM policy with full permissions to IAM and nothing else. Attach the policy to a group or
-role, and give access only to trusted users. This allows _effective_ administrator access without an _explicit_
+One approach is to create an IAM policy with full permissions to IAM and nothing else. Attach the policy to a group,
+and give access only to trusted users. This allows _effective_ administrator access without an _explicit_
 administrator policy. For example, you could use the following Terraform code to create such a policy:
 
 [source,hcl]
@@ -291,14 +303,14 @@ In this example, any IAM user that is a member of the `iam-admins` group will ha
 functionality in the IAM service, make them an effective administrator of the account.
 
 ==== Enabling multi-factor authentication for IAM users
-Recommendation 1.2, which requires all IAM users to have MFA enabled, seems straightforward on the surface, but in AWS,
+Recommendation 1.10, which requires all IAM users to have MFA enabled, seems straightforward on the surface, but in AWS,
 there's no way to explicitly require MFA for log in. Instead, you can make sure that all groups and roles have a
 conditional IAM policy attached that explicitly denies all actions unless MFA is enabled. This way, whenever a user logs
 in without MFA, all services will show a permission denied error if the user didn't use MFA.
 
 The
 link:https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_examples_aws_my-sec-creds-self-manage-mfa-only.html[AWS
-documentation has an example of this policy]. Create the policy with Terraform, and attach it to every group and role
+documentation has an example of this policy]. Create the policy with Terraform, and attach it to every group
 you create - including the `iam-admins` and `support` groups we created above. Here's an example:
 
 [source,hcl]
@@ -378,10 +390,10 @@ won't have access to any services, even if the `support` group or the user had o
 enough permissions to set up an MFA device, and after doing so, they can log in and will have any permissions granted to
 them by other IAM policies.
 
-Attach a policy like this one to every role and group in your account.
+Attach a policy like this one to every group in your account.
 
 ==== Password policy
-The IAM password policy is perhaps the most straightforward and explicit set of recommendations (1.5-1.11) in the entire
+The IAM password policy is perhaps the most straightforward and explicit set of recommendations (1.8-1.9 and 1.12) in the entire
 Benchmark. You can invoke link:https://www.terraform.io/docs/providers/aws/r/iam_account_password_policy.html[the
 Terraform `aws_iam_account_password_policy` resource] to implement the recommended policy.
 
@@ -391,16 +403,71 @@ For example:
 ----
 resource "aws_iam_account_password_policy" "aws_foundations_benchmark_policy" {
   minimum_password_length        = 14
-  require_numbers                = true
-  require_symbols                = true
-  require_lowercase_characters   = true
-  require_uppercase_characters   = true
   allow_users_to_change_password = true
   hard_expiry                    = true
   max_password_age               = 90
   password_reuse_prevention      = 24
 }
 ----
+
+[[cleanup_expired_certs]]
+==== Cleanup Expired SSL/TLS certificates
+The CIS AWS v1.3 recommendations require that all expired SSL/TLS certificates stored in AWS IAM are automatically removed
+(see 1.19). Unfortunately removing expired certificates via AWS Management Console is not currently supported so we must remove
+then using the AWS API. To view the current certificates stored in IAM, use the AWS CLI and execute the `list-server-certificates`
+command:
+
+[source,bash]
+----
+aws iam list-server-certificates
+----
+
+The command output should return an array that contains all of the SSL/TLS certificates currently stored in IAM and their metadata:
+
+[source,json]
+----
+{
+	"ServerCertificateMetadataList": [{
+		"ServerCertificateId": "EHDGFRW7EJFYTE88D",
+		"ServerCertificateName": "MyServerCertificate",
+		"Expiration": "2021-07-05T23:59:59Z",
+		"Path": "/",
+		"Arn": "arn:aws:iam::012345678910:server-certificate/MySSLCertificate",
+		"UploadDate": "2018-06-10T11:56:08Z"
+	}]
+}
+----
+
+The `Expiration` attribute contains the expiration date for each SSL/TLS certificate which you can use to determine
+if it should be removed. To remove the certificate use the `delete-server-certificate` command, making sure to
+substitute `<CERTIFICATE_NAME>` with the `ServerCertificateId` attribute from the previous command:
+
+[source,bash]
+----
+aws iam delete-server-certificate --server-certificate-name <CERTIFICATE_NAME>
+----
+
+To automate this process you might decide to implement a Lambda function that runs on a regular schedule and removes
+all expired SSL/TLS certificates. Check out the <<apply_account_baseline_root>>, <<apply_account_baseline_logs>> and <<apply_account_baseline_security>> section of the deployment walkthrough
+to see how this module is used from the Landing Zone account baselines and is deployed in each of your AWS accounts.
+
+[[iam_access_analyzer]]
+==== IAM Access Analyzer
+As of version 1.3.0, the CIS recommendations stipulate that the AWS IAM Access Analyzer service is enabled across all active regions in a given
+AWS Account or Organization.
+
+To achieve this compliance requirement, enable the IAM Access Analyzer service for every AWS region you have enabled in
+every one of your AWS accounts. Alternatively, you could make use of the link:https://github.com/gruntwork-io/terraform-aws-security/tree/master/modules/iam-access-analyzer-multi-region[`iam-access-analyzer-multi-region`] module
+available in the Gruntwork Service Catalog, or if you're following this guide, refer to <<apply_account_baseline_root>>, <<apply_account_baseline_logs>> and <<apply_account_baseline_security>> sections of the
+deployment walkthrough to see how this module is used from the Landing Zone account baselines and is deployed in each of your AWS accounts.
+
+Once enabled, it will scan only within the boundaries of the AWS Account or Organization it has access to. Only specific
+resources are analyzed and included in the results - e.g. S3 buckets, SQS, etc. (For the full list of resources supported,
+please visit link:https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-resources.html[the relevant AWS docs]).
+This lets you identify unintended access to these resources and data by external entities.
+
+The findings from the IAM Access Analyzer can be found in the AWS web console, and can be archived or resolved.
+Please visit the link:https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-findings.html[AWS guidance on how to do so].
 
 [[manual_steps]]
 ==== Manual steps
@@ -412,9 +479,9 @@ Perform the steps in this section manually.
 Securing the "root" user, or the first user that is created when you set up an AWS account, is one of the
 first actions you should take in any new account. Unfortunately, there is no API or automation available for
 configuring an MFA device for the root user. Follow the manual steps outlined in the
-link:https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html#id_root-user_manage_mfa[AWS docs]. Configuring a virtual MFA device will achieve recommendation 1.13. You can also refer to the link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/[production-grade AWS account structure guide.]
+link:https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html#id_root-user_manage_mfa[AWS docs]. Configuring a virtual MFA device will achieve recommendation 1.5. You can also refer to the link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/[production-grade AWS account structure guide.]
 
-For the paranoid: configure a hardware MFA device, as suggested by recommendation 1.14. We suggest using a
+For the paranoid: configure a hardware MFA device, as suggested by recommendation 1.6. We suggest using a
 link:https://www.yubico.com/[Yubikey] due to its reputation for strong security characteristics and multitude of form
 factors. Refer to
 link:https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_mfa_enable_physical.html#enable-hw-mfa-for-root[
@@ -437,21 +504,66 @@ docs] on how to add an HTTPS endpoint as a subscriber to the alerts.
 When setting up a new account, AWS asks for contact information and security questions. Unfortunately, there
 is no API or automation available for this functionality. In the AWS console, visit the link:https://console.aws.amazon.com/billing/home?#/account[Account settings] page and complete the _Alternate Contacts_ and _Configure Security Challenge Questions_ questions.
 
-For further detail, follow the manual steps outlined in the CIS Benchmark document and refer to the
-link:https://aws.amazon.com/answers/security/aws-secure-account-setup/[AWS Secure Account Setup steps].
+For further detail, follow the manual steps outlined in the CIS Benchmark document.
+
+=== Storage
+Version 1.3.0 of the Benchmark includes a new storage section that has three recommendations pertaining to the S3 service as well as the EC2 service.
+These have to do with encryption at rest and in transit.
+
+To comply with recommendation 2.1.1, make sure to enable server side encryption on your S3 buckets. In Terraform, this
+is achieved by configuring the `server_side_encryption_configuration` argument of the `aws_s3_bucket` resource.
+
+To comply with recommendation 2.1.2, make sure that all access to your S3 buckets is over TLS. In Terraform, you will
+want to attach a policy to your buckets that includes a statement similar to this:
+
+[source,hcl]
+----
+statement {
+  sid     = "AllowTLSRequestsOnly"
+  effect  = "Deny"
+  actions = ["s3:*"]
+  resources = [
+    "<YOUR BUCKET ARN>",
+    "${<YOUR BUCKET ARN>}/*"
+  ]
+  principals {
+    type        = "*"
+    identifiers = ["*"]
+  }
+  condition {
+    test     = "Bool"
+    variable = "aws:SecureTransport"
+    values   = ["false"]
+  }
+}
+----
+[[configure_ebs_encryption]]
+==== Configure EBS Encryption
+To comply with recommendation 2.2.1 be sure to configure link:https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSEncryption.html[EBS volume encryption]
+in all of the enabled AWS regions within your AWS Account(s). You can invoke the Terraform
+`aws_ebs_encryption_by_default` resource to implement the recommendation.
+
+For example:
+
+[source,hcl]
+----
+resource "aws_ebs_encryption_by_default" "ebs_encryption" {
+  enabled = true
+}
+----
 
 === Logging
 In the Logging section, the Benchmark recommendations target the following services:
 
-* link:https://aws.amazon.com/cloudtrail/[AWS CloudTrail]
-* link:https://aws.amazon.com/config/[AWS Config]
-* KMS key rotation
-* VPC Flow logs
+* link:https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html[AWS CloudTrail]
+* link:https://docs.aws.amazon.com/config/latest/developerguide/WhatIsConfig.html[AWS Config]
+* link:https://docs.aws.amazon.com/kms/latest/developerguide/rotate-keys.html[KMS key rotation]
+* link:https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html[VPC Flow Logs]
 
 We'll cover each of them in turn.
 
 ==== AWS CloudTrail
-The Benchmark has specific requirements for the CloudTrail configuration, described in recommendations 2.1-4 and 2.6-7.
+The Benchmark has specific requirements for the CloudTrail configuration, described in recommendations 3.1-4, 3.6-7 and 3.10-11.
 The CloudTrail must have the following characteristics:
 
 . Collects events
@@ -467,6 +579,7 @@ with CloudWatch Logs]
 . link:https://docs.aws.amazon.com/awscloudtrail/latest/userguide/encrypting-cloudtrail-log-files-with-aws-kms.html[Encrypts
 CloudTrail logs at rest]
 . Enables link:https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerLogs.html[access logging] for the CloudTrail S3 bucket
+. Enables link:https://docs.aws.amazon.com/AmazonS3/latest/user-guide/enable-cloudtrail-events.html[object-level logging] for read and write events for the CloudTrail S3 bucket
 
 Use the link:https://www.terraform.io/docs/providers/aws/r/cloudtrail.html[`aws_cloudtrail`] Terraform resource to create the CloudTrail. Include the following settings in the CloudTrail configuration:
 
@@ -475,8 +588,18 @@ Use the link:https://www.terraform.io/docs/providers/aws/r/cloudtrail.html[`aws_
 is_multi_region_trail         = true
 include_global_service_events = true
 enable_log_file_validation    = true
-s3_bucket_name                = <YOUR BUCKET NAME>
-cloud_watch_logs_group_arn    = <YOUR CLOUDWATCH LOGS GROUP ARN>
+s3_bucket_name                = "<YOUR CLOUDTRAIL BUCKET NAME>"
+cloud_watch_logs_group_arn    = "<YOUR CLOUDWATCH LOGS GROUP ARN>"
+
+event_selector {
+  read_write_type           = "All"
+  include_management_events = true
+
+  data_resource {
+    type   = "AWS::S3::Object"
+    values = ["<YOUR CLOUDTRAIL BUCKET ARN>"]
+  }
+}
 ----
 
 You'll also need the link:https://www.terraform.io/docs/providers/aws/r/s3_bucket.html[`aws_s3_bucket`],
@@ -490,7 +613,7 @@ create a CloudWatch Log group as another location for CloudTrail to send events.
 resource `cloud_watch_logs_group_arn` parameter when creating the CloudTrail.
 
 ==== AWS Config
-Benchmark recommendation 2.5 states that AWS Config be enabled in all regions. This is challenging to implement with
+Benchmark recommendation 3.5 states that AWS Config be enabled in all regions. This is challenging to implement with
 Terraform because running a particular configuration in all regions is not a feature that Terraform has natively.
 Terraform has link:https://www.terraform.io/docs/configuration/expressions.html#for-expressions[loops], but they aren't
 available for the purpose of repeating a resource in many regions. Unfortunately, at the time of writing, there isn't a
@@ -512,7 +635,7 @@ example, you could specify one provider for each region, then invoke the module 
 
 [source,hcl]
 ----
-  # The default provider configuration
+# The default provider configuration
 provider "aws" {
   alias  = "us-east-1"
   region = "us-east-1"
@@ -548,7 +671,7 @@ When AWS launches new regions, they are link:https://docs.aws.amazon.com/general
 Alternatively, you could link:https://docs.aws.amazon.com/general/latest/gr/rande-manage.html#rande-manage-disable[disable] the regions you aren't using and only enable AWS Config for those that you need.
 
 ==== KMS Key rotation
-Finally, a simple recommendation! To meet recommendation 2.8, create KMS keys with key rotation enabled. Using Terraform, it looks like this:
+Finally, a simple recommendation! To meet recommendation 3.8, create KMS keys with key rotation enabled. Using Terraform, it looks like this:
 
 [source,hcl]
 ----
@@ -571,7 +694,7 @@ link:https://github.com/gruntwork-io/cloud-nuke[`cloud-nuke defaults-aws` comman
 (and default security groups) from all regions of an account, making it easier to achieve this recommendation.
 
 === Monitoring
-The Monitoring section has 14 recommendations for creating specific
+The Monitoring section has 15 recommendations for creating specific
 link:https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/MonitoringPolicyExamples.html[CloudWatch Logs metric
 filters] that send alarms to an SNS topic when a particular condition is met.
 
@@ -590,16 +713,15 @@ production-grade VPC on AWS] guide, which includes recommendations for segmentat
 security groups, and remote access. Moreover, our link:https://gruntwork.io/reference-architecture/[Reference
 Architecture] can get you up and running with a secure network configuration immediately.
 
-Recommendations 4.1 and 4.2 forbid allowing ports 22 (SSH) and 3389 (Remote Desktop) from the public Internet
-(`0.0.0.0/0`). This seems entirely reasonable, no? Avoid creating any security groups with these rules. Instead, if you
-require SSH or Remote Desktop to your cloud resources, provide a more restricted CIDR range, such as the IP address of
-your offices.
+Recommendation 5.1 requires that you use Network ACL rules to block all access to the remote server administration ports, such as SSH to port 22 and Remote
+Desktop to port 3389, by default. You can then add additional NACL rules to allow remote admin access, but only from specific CIDR blocks. Recommendation 5.2 similarly allows you to allow remote admin access from specific CIDR blocks in your Security Groups. Note that allowing remote admin access from all IPs (`0.0.0.0/0`) is NOT allowed, so instead, if you require SSH or Remote Desktop to your cloud resources, provide a more restricted CIDR
+range, such as the IP addresses of your offices.
 
-To meet recommendation 4.3, run the link:https://github.com/gruntwork-io/cloud-nuke[`cloud-nuke defaults-aws`] command
+To meet recommendation 5.3, run the link:https://github.com/gruntwork-io/cloud-nuke[`cloud-nuke defaults-aws`] command
 to remove the rules from all default security groups. Note that it isn't possible to actually delete the default
 security group, so instead the command deletes the rules, eliminating the risk of something being mistakenly exposed.
 
-Finally, for recommendation 4.4, the guidance is straightforward: when creating peering connections between VPCs, do not
+Finally, for recommendation 5.4, the guidance is straightforward: when creating peering connections between VPCs, do not
 create routes for subnets that don't need them. In other words, only create routes between subnets that need them based
 on the services running on those subnets. This can help to avoid exposing services between networks unnecessarily.
 
@@ -614,102 +736,101 @@ Infrastructure as Code modules from Gruntwork.
 
 This walkthrough has the following pre-requisites:
 
-Gruntwork Infrastructure as Code Library::
-  This guide uses code from the link:https://gruntwork.io/infrastructure-as-code-library/[Gruntwork Infrastructure as Code Library], as it
-  implements most of the production-grade design for you out of the box. Make sure to read
-  link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library[How to use the Gruntwork Infrastructure as Code Library].
+==== Gruntwork Infrastructure as Code Library
+This guide uses code from the link:https://gruntwork.io/infrastructure-as-code-library/[Gruntwork Infrastructure as Code Library], as it
+implements most of the production-grade design for you out of the box. Make sure to read
+link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library[How to use the Gruntwork Infrastructure as Code Library].
 
-Gruntwork Compliance for CIS AWS Foundations Benchmark::
-  This guide also uses code from the link:https://gruntwork.io/achieve-compliance[Gruntwork CIS AWS
-  Foundations Benchmark repository], which contains the necessary configurations to achieve compliance.
-+
+==== Gruntwork Compliance for CIS AWS Foundations Benchmark
+This guide also uses code from the link:https://gruntwork.io/achieve-compliance[Gruntwork CIS AWS
+Foundations Benchmark repository], which contains the necessary configurations to achieve compliance.
 [.exceptional]
 IMPORTANT: You must be a [js-subscribe-cta]#Gruntwork Compliance subscriber# to access the Gruntwork
 Infrastructure as Code Library and the CIS AWS Foundations Benchmark modules.
 
-How to configure a production-grade AWS account structure::
-  Review the link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/[production-grade AWS account structure guide] to familiarize yourself with many of the concepts that this walkthrough depends on.
+[[account_structure]]
+==== How to configure a production-grade AWS account structure
+Review the link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/[production-grade AWS account structure guide] to familiarize yourself with many of the concepts that this walkthrough depends on.
 
+==== Terraform
+This guide uses https://www.terraform.io/[Terraform] to define and manage all the infrastructure as code. If
+you're not familiar with Terraform, check out
+https://blog.gruntwork.io/a-comprehensive-guide-to-terraform-b3d32832baca[A Comprehensive Guide to Terraform],
+https://training.gruntwork.io/p/terraform[A Crash Course on Terraform], and
+link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library[How to Use the Gruntwork
+Infrastructure as Code Library].
 
-Terraform::
-  This guide uses https://www.terraform.io/[Terraform] to define and manage all the infrastructure as code. If
-  you're not familiar with Terraform, check out
-  https://blog.gruntwork.io/a-comprehensive-guide-to-terraform-b3d32832baca[A Comprehensive Guide to Terraform],
-  https://training.gruntwork.io/p/terraform[A Crash Course on Terraform], and
-  link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library[How to Use the Gruntwork
-  Infrastructure as Code Library].
+==== Terragrunt
+This guide uses https://terragrunt.gruntwork.io/[Terragrunt] to configure the infrastructure as code. To get familiar
+with Terragrunt, explore the https://terragrunt.gruntwork.io/docs/#features[features], read the https://terragrunt.gruntwork.io/docs/getting-started/quick-start/[guides],
+or dive into the https://terragrunt.gruntwork.io/docs/[documentation].
+
+==== Keybase (optional)
+As part of this guide, you will create IAM users, including, optionally, credentials for those IAM users. If you
+choose to create credentials, those credentials will be encrypted with a PGP key. You could provide the PGP keys
+manually, but a more manageable option may be to have your team members to sign up for https://keybase.io[Keybase],
+create PGP keys for themselves, and then you can provide their Keybase usernames, and the PGP keys will be retrieved
+automatically.
 
 [[gruntwork_solution]]
 === The Gruntwork solution
-Gruntwork offers battle-tested infrastructure as code modules to help you create production grade infrastructure in a
-fraction of the time it would take to develop from scratch. Each of the code modules are "compliance-ready"; they are
-mostly unopinionated by default, but they can be configured for compliance with the right settings.
+Gruntwork offers infrastructure-as-code battle-tested modules that will help you create _production-grade_ infrastructure faster and much more efficiently than if you develop your modules from scratch. In the CIS compliance library, there are many core modules, and each one of them is "compliance-ready". They are configured in a way to help you achieve CIS compliance up to the latest supported benchmark, but still allow some flexibility in the setup.
 
-To further simplify and expedite compliance, the Gruntwork Compliance modules are "wrappers" around the core,
-unopinionated modules in the Infrastructure as Code Library. The wrappers call the core modules with configuration values
-that are compliant with the AWS Foundations Benchmark. You can use the wrapper modules by creating a module of your own
-(this can be considered a second wrapper) and using the compliance module as the `source`. Optionally, you can also use
-`terragrunt` to call your module, thus creating a chain of IaC modules.
+The compliance library is known as "Gruntwork CIS Service Catalog" and it has its own standalone modules, or could be building on top of the existing standard & non-compliant core modules from the "Standard Service Catalog" or "Infrastructure as Code Library". Each of these modules can be used on their own, or within "wrappers" (explained later) by passing in the required inputs and using `terraform` or `terragrunt`.
+
+The image below shows the hierarchy between the different levels of modules from the different code libraries Gruntwork offers.
  +
  +
 
-.Nested wrapper modules help to avoid repetitive code and minimize the amount of extra work needed to achieve compliance.
-image::/assets/img/guides/cis-compliance/wrappers.png[]
+.Types of CIS module relationships to avoid repetitive code and minimize the amount of extra work needed to achieve compliance.
+image::/assets/img/guides/cis-compliance/cis-module-relationships.png[]
 
 Let's unpack this a bit.
 
 [[core_modules]]
 ==== Core modules
 Core modules are broadly applicable and can be used with or without compliance requirements. For example,
-the link:https://github.com/gruntwork-io/module-security/blob/master/modules/iam-groups/README.md[`iam-groups`
+the link:https://github.com/gruntwork-io/terraform-aws-security/blob/master/modules/iam-groups/README.md[`iam-groups`
 core module] creates a best practices set of IAM groups. The groups are configurable according to your needs.
 You could, for example, choose to create a group with read-only access, another group with full administrator
 access, and no other groups. All Gruntwork subscribers have access to the core modules, which reside in
-Gruntwork's link:https://github.com/gruntwork-io/toc[infrastructure as code repositories].
+Gruntwork's link:https://gruntwork.io/repos[infrastructure as code repositories].
+
+[[standalone_modules]]
+==== Standalone Compliance modules
+The standalone compliance modules complement the modules available in the IaC Library. They have the CIS compliance requirements built right in and may combine multiple modules including Core modules for a
+specific use case. For example, the link:https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/tree/master/modules/cleanup-expired-certs[`cleanup-expired-certs` standalone module] deploys a Lambda function that runs regularly and automatically removes all expired SSL/TLS certificates stored in AWS IAM in compliance with recommendation 1.19 of the CIS AWS Foundations Benchmark. These modules are in the link:https://github.com/gruntwork-io/terraform-aws-cis-service-catalog[`terraform-aws-cis-service-catalog`
+repository] (accessible to Gruntwork Compliance subscribers).
 
 [[wrapper_modules]]
 ==== Compliance wrapper modules
 The compliance wrapper modules are an extension of the IaC Library. They use the
 link:https://www.terraform.io/docs/modules/sources.html[`source` argument in a Terraform module block] to invoke
 the core module with a configuration that is customized for compliance with the CIS AWS Foundations Benchmark.
-These modules are in the link:https://github.com/gruntwork-io/cis-compliance-aws[`cis-compliance-aws`
+These modules are in the link:https://github.com/gruntwork-io/terraform-aws-cis-service-catalog[`terraform-aws-cis-service-catalog`
 repository] (accessible to Gruntwork Compliance subscribers).
-
-[[infrastructure_modules]]
-==== infrastructure-modules
-The `infrastructure-modules` are your organization's "blueprint" for how to deploy infrastructure. You can
-use `infrastructure-modules` to customize the settings according to the needs of your environment. Subscribers
-can refer to the
-canonical link:https://github.com/gruntwork-io/infrastructure-modules-multi-account-acme[ACME infrastructure-modules
-repository] for an example of how you might use `infrastructure-modules`.
-
-If you're using Terragrunt, the `infrastructure-modules` are optional; you can call the compliance
-wrapper modules directly as the `source` from a Terragrunt configuration. The benefit of this is that you have less code to maintain by depending directly on Gruntwork's upstream compliance modules.
 
 [[infrastructure_live]]
 ==== infrastructure-live
 `infrastructure-live` uses link:https://github.com/gruntwork-io/terragrunt[Terragrunt] to make it easier to
 work with Terraform modules in multiple environments. `infrastructure-live` is optional - you can use all of the modules
 with or without Terragrunt.
-
-If you're not using Terragrunt, you can use `infrastructure-modules` to call the compliance
-wrapper modules. Refer to the canonical link:https://github.com/gruntwork-io/infrastructure-live-multi-account-acme[ACME
-infrastructure-live repository], and in particular the
-link:https://github.com/gruntwork-io/infrastructure-live-multi-account-acme/tree/master/_docs[Infrastructure
-walkthrough] for comprehensive documentation on how `infrastructure-live`, `infrastructure-modules`, and the core IaC
-modules interact.
  +
+ +
+If you're not using Terragrunt, you can use Terraform modules to call the compliance wrapper modules directly. Subscribers can refer to the
+link:https://github.com/gruntwork-io/terraform-aws-service-catalog/blob/master/core-concepts.md#create-your-own-service-catalog[Create your own service catalog section]
+in the Gruntwork Service Catalog documentation for more information on how you might use `infrastructure-live`.
+
 [[benefits]]
 ==== Benefits
 This modular, decomposed approach allows for maximum code reuse. The core modules can be used with or without
 compliance, depending on how they are configured. The compliance wrappers are like shadows of the core
 modules; they pass through most of the variables to the core modules without alteration, but hard code any
-settings needed for compliance. When you call the compliance modules from your own code in
-`infrastructure-modules`, you only need to set up any variables that are custom for your environment. Often
+settings needed for compliance. When you call the compliance modules from your own code, you only need to set up any variables that are custom for your environment. Often
 times the default settings are good enough.
  +
  +
-You can use this approach on AWS account. In many cases, you'll only need compliance for production accounts, but the
+You can use this approach on each AWS account. In many cases, you'll only need compliance for production accounts, but the
 same methodology can be applied to pre-production accounts as well.
  +
  +
@@ -718,233 +839,1380 @@ If you need to brush up on how the IaC Library works, read the
 link:https://gruntwork.io/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library/[How to use
 the Gruntwork Infrastructure as Code Library] guide.
 
-=== Manual steps
-Start by completing the manual configurations describe above in <<manual_steps>>.
 
-[[create_password_policy]]
-=== Create an IAM user password policy
-After the manual steps are complete, the next step is to create an IAM user password policy using the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/examples/iam-password-policy/README.adoc[`iam-password-policy`
-wrapper module]. Complete this step before creating any IAM users!
+=== Prepare your `infrastructure-live` repository
 
-[[wrapper_code]]
-==== Using the wrapper module
-This section demonstrates how to use the CIS compliance password policy wrapper module to create a password policy. Follow this pattern for each of the wrapper modules discussed throughout this walkthrough.
+We've previously described exactly how to prepare your repository in the
+link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/#prepare-your-infrastructure-live-repository[Gruntwork Landing Zone guide].
+Follow the steps in that section to get your `infrastructure-live` repository set up for the next steps.
 
-===== Using the wrapper module with Terraform
-If you're using Terraform without Terragrunt, use this section to create a module in your `infrastructure-modules` repository.
+=== Create the root account
+
+The first step is to create your root account. This account will be the parent of all of your other AWS accounts and
+the central place where you manage billing. You create this initial account manually, via a web browser:
+
+. Go to https://aws.amazon.com.
+. Click Create an AWS Account.
+. Go through the sign up flow, entering contact and billing details as requested.
+. You will be asked to enter an email address and password to use as the credentials for the root user of this root
+account.
+
+[[lock_down_root_user]]
+=== Lock down the root user
+
+After signing up for an AWS account, you'll be logged in as the root user. The root user has unrestricted access to
+just about everything in your AWS account (and any child accounts), so if an attacker compromises your root user, the
+results can be catastrophic for your company. Therefore, you should lock down the root user as much as possible:
+
+Use a secrets manager::
+Do NOT store the root user's password, or secrets of any kind, in plain text. Instead, always use a secrets manager
+such as https://1password.com[1Password], https://www.lastpass.com[LastPass], or https://www.passwordstore.org[pass]
+to store the credentials in an encrypted format.
+
+Use a strong, generated password::
+Do NOT re-use passwords from other websites, or any password that you can remember at all. Instead, generate a random,
+cryptographically secure, long password (20+ characters) for the root user. All the password managers mentioned above
+can generate and store passwords for you in one step, so use them!
+
+Add security questions to your root account::
+The CIS benchmark suggests adding security questions when registering your AWS account so that when somebody contacts
+AWS support, they will be required to complete a security challenge. To add security questions to the root account,
+navigate in the AWS web console to `My Account` and then to the `Personal Information` page. There you should be able
+to click on `Configure Security Challenge Questions` and add your questions.
+
+Enable MFA::
+Make sure to
+https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html#id_root-user_manage_mfa[enable MFA for your root user].
+Feel free to use a virtual or hardware MFA device, whichever is more straightforward or required by your company, as either one
+dramatically improves the security of your root user. It is up to your discretion to decide which option is suitable
+for your use case. The CIS benchmark recommends using a dedicated or company-owned device for MFA and not a personal
+one. This applies to both virtual and hardware devices.
+
+Disable access keys::
+Make sure to
+https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html#id_root-user_manage_delete-key[delete the root user's access keys],
+so that the only way to login as the root user is via the web console, where MFA is required.
+
+Don't use the root user again::
+In the next section, you will create an IAM user in the root account with admin permissions. Once you've created that
+IAM user, you should do everything as that IAM user, and more or less never touch the root user account again.
+The only time you'll need it is for account recovery situations (e.g., you accidentally deleted the IAM user or lost
+your credentials) or for the
+https://docs.aws.amazon.com/general/latest/gr/aws_tasks-that-require-root.html[small number of tasks that require root user credentials].
+
+[[create_iam_user_in_root]]
+=== Create an IAM user in the root account
+
+As the last action you do as the root user, you MUST create an IAM user. This is not only a better practice from a
+security standpoint, but also, the `account-baseline-xxx` modules we will use below assume IAM roles, which does not
+work with a root user. Later on, we'll create and manage all IAM users as code, but you should create this very first
+IAM user manually by
+https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html#id_users_create_console[following these instructions]:
+
+. Enter a username for your IAM user.
+. Select both "programmatic access" and "AWS Management Console access."
+. On the next page, click "Attach existing policies to user directly" and attach the `AdministratorAccess` policy.
+. Click next a few more times to create the IAM user.
+. In a secrets manager, save the IAM sign-in URL, your IAM user's username, the password, and your Access Keys.
+
+[[lock_down_iam_users]]
+=== Lock down the root account IAM users
+
+Although IAM users don't have the same powers as a root user, having an IAM user account compromised can still be a
+huge problem for your company (especially if that IAM user had admin permissions), so it's still critical to lock down
+IAM user accounts as much as possible:
+
+Use a secrets manager::
+Do NOT store the root user's password, or secrets of any kind, in plain text. Instead, always use a secrets manager
+such as https://1password.com[1Password], https://www.lastpass.com[LastPass], or https://www.passwordstore.org[pass]
+to store the credentials in an encrypted format.
+
+
+Use a strong, generated password::
+Do NOT re-use passwords from other websites, or any password that you can remember at all. Instead, generate a random,
+cryptographically secure, long password (20+ characters). All the password managers mentioned above can generate and
+store passwords for you in one step, so use them!
+
+
+Enable MFA::
+Always make sure to
+https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_mfa_enable.html[enable MFA for your IAM user].
+Feel free to use a virtual or hardware MFA device—whichever is easier or required by your company—as either one
+dramatically improves the security of your IAM user. Note that using SMS (text messages) for MFA is
+https://www.schneier.com/blog/archives/2016/08/nist_is_no_long.html[no longer recommended by NIST] due to known
+https://www.theverge.com/2017/9/18/16328172/sms-two-factor-authentication-hack-password-bitcoin[vulnerabilities with the cellular system],
+so using a virtual or hardware MFA device is preferable; that said, MFA with SMS is still better than no MFA at all.
+
+[[deployment_approach]]
+=== Deployment approach
+Before we dive into the code and deployment for each resource, let's take a step back and understand how the code is structured.
+Most of the features explained in the <<production_grade_design>> section will be deployed using the Landing Zone solution, and some more standalone modules like the VPC module.
+
+The Landing Zone will be deployed in three steps - the `account-baseline-root` to set up your organization-wide configurations, create the necessary child AWS accounts, set up the CloudTrail and AWS Config buckets. Next, we'll need to apply the `account-baseline-app` against the created logs account, adding more settings that will be used for aggregation of logs and metrics from the whole organization. Then the `account-baseline-security` will be applied, and that's responsible to set up your IAM roles and groups that would allow you to access the rest of the accounts within your organization. And finally, the `account-baseline-app` will be applied to an AWS account with the purpose of hosting an application.
+
+The standalone modules will follow the pattern of referencing the module and providing the necessary input variables for it, then applying with `terragrunt`.
+
+[[deploy_landingzone]]
+=== Deploy Landing Zone solution
+
+==== Apply the `account-baseline-root` to the root account
+
+Configure the `account-baseline-root` for the root account
+
+[.exceptional]
+IMPORTANT: You must be a [js-subscribe-cta]#Gruntwork Compliance subscriber# to access the Gruntwork Infrastructure as Code Library and the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/[CIS AWS Foundations Benchmark modules].
+
+First, let's set consider the repository structure that is recommended by this guide. It is available for your reference in the "/examples/for-production" section in the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/tree/master/examples/for-production[`terraform-aws-cis-service-catalog` repository]. Consider the following directory structure for your `infrastructure-live` repository. It showcases the configuration files for your local variables.
 
 ----
-infrastructure-modules
-└── security
-    └── iam-password-policy
-        ├── main.tf
-        └── variables.tf
+.
+└ infrastructure-live
+    └ root
+        └ account.hcl
+        └ _global
+            └ region.hcl
+        └ us-east-1
+            └ region.hcl
+    └ common.hcl
+    └ accounts.json
 ----
 
-Inside of `main.tf`, configure your AWS provider settings:
+Each of the `region.hcl`, `accounts.hcl` and `common.hcl` should contain the relevant information, so in your modules, you're able to reference the values like this:
 
-.infrastructure-modules/security/iam-password-policy/main.tf
-[source,hcl]
+[source, hcl]
 ----
-provider "aws" {
-  region = var.aws_region
+locals {
+  # Automatically load common variables shared across all accounts
+  common_vars = read_terragrunt_config(find_in_parent_folders("common.hcl"))
+
+  # Automatically load account-level variables
+  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+
+  # Extract the account_name for easy access
+  account_name = local.account_vars.locals.account_name
+
+  # Automatically load region-level variables
+  region_vars = read_terragrunt_config(find_in_parent_folders("region.hcl"))
+
+  # Extract the region for easy access
+  aws_region = local.region_vars.locals.aws_region
 }
 ----
 
-Now use the `iam-password-policy` compliance module from the Gruntwork `cis-compliance-aws` repository, making sure to
-replace the `<VERSION>` placeholder with the latest version from the
-https://github.com/gruntwork-io/cis-compliance-aws/releases[releases page]:
+You'll need to create these files to be able to follow the code examples following. For examples on what to put in each of these files, refer to the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/tree/master/examples/for-production[`terraform-aws-cis-service-catalog` repository]. Each of the `terragrunt.hcl` files will use the above `locals` configuration to help you avoid repetition. Note that the examples below won't show this in the interest of clarity.
 
-.infrastructure-modules/security/iam-password-policy/main.tf
-[source,hcl]
-----
-module "iam_password_policy" {
-  # Make sure to replace <VERSION> in this URL with the latest cis-compliance-aws release
-  source                  = "git@github.com:gruntwork-io/cis-compliance-aws.git//modules/iam-password-policy?ref=<VERSION>"
-  minimum_password_length = var.minimum_password_length
-  aws_region              = var.aws_region
-}
-----
+Next, we'll configure the `account-baseline-root` with settings needed for creating all the child accounts - AWS Organizations, IAM Roles, IAM Users, IAM Groups, IAM Password Policies, Amazon GuardDuty, AWS CloudTrail, AWS Config and Security Hub.
 
-The module parameters should be exposed as input variables in `variables.tf`:
+We'll be using the `landingzone/account-baseline-root` module from https://github.com/gruntwork-io/terraform-aws-cis-service-catalog[terraform-aws-cis-service-catalog].
 
-.infrastructure-modules/security/iam-password-policy/variables.tf
-[source,hcl]
-----
-variable "aws_region" {
-  description = "The AWS region in which all resources will be created"
-  type        = string
-}
+NOTE: This guide will use https://github.com/gruntwork-io/terragrunt[Terragrunt] and its associated file and folder
+structure to deploy Terraform modules. Please note that *Terragrunt is NOT required for using Terraform modules from the Gruntwork Infrastructure as Code Library.* Check out link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library[How to use the Gruntwork Infrastructure as Code Library]
+for instructions on alternative options, such as how to
+link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library#deploy_using_plain_terraform[deploying how to use plain terraform].
 
-variable "minimum_password_length" {
-  description = "Minimum length to require for user passwords."
-  type        = number
-  default     = 20
-}
-----
-
-With the module in place, it's time to test your code. See
-link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library#manual_tests_terraform[Manual tests for
-Terraform code] and
-link:/guides/foundations/how-to-use-gruntwork-infrastructure-as-code-library#automated_tests_terraform[Automated tests
-for Terraform code] for instructions.
-
-[[merge_release_password_policy_module]]
-===== Merge and release your password policy module
-
-Once the module is working the way you want, submit a pull request, get your changes merged into the `master` branch,
-and create a new versioned release by using a Git tag. For example, to create a `v0.3.0` release:
-
-[source,bash]
-----
-git tag -a "v0.3.0" -m "Created iam-password-policy module"
-git push --follow-tags
-----
-
-With the module released, you can use Terraform to create the password policy. Follow the instructions in the
-link:https://github.com/gruntwork-io/cis-compliance-aws/tree/master/examples/iam-password-policy/terraform[terraform usage example].
-
-===== Using the compliance wrapper module with Terragrunt
-
-If you're using Terragrunt, you can use the password policy Terraform module in the CIS compliance repository from a Terragrunt configuration directly, with no need to create a Terraform module of your own! In this case, `cis-compliance-aws` is the canonical Terraform module. To do so, configure a `terragrunt.hcl` to invoke the module. First, create a directory for the password policy in your `infrastructure-live` repository:
+Next, create a `terragrunt.hcl` file in `infrastructure-live`, under the file path `root/_global/account-baseline`:
 
 ----
 infrastructure-live
-└── <your account>
-    └── _global
-        └── iam-password-policy
-            └── terragrunt.hcl
+  └ root
+    └ _global
+      └ region.hcl
+      └ account-baseline
+        └ terragrunt.hcl
 ----
+Point the `source` URL in your `terragrunt.hcl` file to the `account-baseline-root` module in the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog[terraform-aws-cis-service-catalog]
+repo, setting the `ref` param to the version you require:
 
-In the directory structure above, `<your account>` is a friendly name for the account you're configuring for compliance. For example, the `prod` account or the `security` account. If this doesn't make sense, see link:https://blog.gruntwork.io/terragrunt-how-to-keep-your-terraform-code-dry-and-maintainable-f61ae06959d8[this post] for more information on Terragrunt.
-
-Next, create `terragrunt.hcl` with the following contents:
-
-.infrastructure-live/<your account>/_global/iam-password-policy/terragrunt.hcl
+.infrastructure-live/root/_global/account-baseline/terragrunt.hcl
 [source,hcl]
 ----
 terraform {
-  # Make sure to replace <VERSION> in this URL with the latest cis-compliance-aws release
-  source = "git::ssh://git@github.com/gruntwork-io/cis-compliance-aws.git//modules/iam-password-policy?ref=<VERSION>"
+  source = "git::git@github.com/gruntwork-io/terraform-aws-cis-service-catalog//modules/landingzone/account-baseline-root?ref=v0.22.0"
+
+  # This module deploys some resources (e.g., AWS Config) across all AWS regions, each of which needs its own provider,
+  # which in Terraform means a separate process. To avoid all these processes thrashing the CPU, which leads to network
+  # connectivity issues, we limit the parallelism here.
+  extra_arguments "parallelism" {
+    commands  = get_terraform_commands_that_need_parallelism()
+    arguments = ["-parallelism=2"]
+  }
+}
+----
+
+[.exceptional]
+IMPORTANT: We **strongly** recommend setting Terraform parallelism to a low value (e.g., `-parallelism=2`), as shown above, with the `account-baseline-xxx` modules. This is because these modules deploy multi-region resources (e.g., GuardDuty, AWS Config, etc), and for each region, Terraform spins up a separate process, so if you don't limit the parallelism, it may peg all your CPU cores and lead to network connectivity errors.
+
+Set the variables for the `account-baseline-root` module in this environment in the `inputs = { ... }` block of `terragrunt.hcl`:
+
+.infrastructure-live/root/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+locals {
+
+  common_vars = read_terragrunt_config(find_in_parent_folders("common.hcl"))
+
+  # A local for more convenient access to the accounts map.
+  accounts = local.common_vars.locals.accounts
+
+  # Both buckets will be created in the logs account by account-baseline-root
+  config_s3_bucket_name     = "acme-config-bucket-logs"
+  cloudtrail_s3_bucket_name = "acme-cloudtrail-logs"
 }
 
-# Include all settings from the root terragrunt.hcl file
+inputs = {
+  # Prefix all resources with this name
+  name_prefix = "<SOME_UNIQUE_IDENTIFIER>-root"
+
+  # If you've already created an AWS Organization in your root account, set this to false
+  create_organization = false
+
+  # The child AWS accounts to create in this AWS organization
+  child_accounts = {
+    logs = {
+      email = "root-accounts+logs@acme.com"
+
+      # Mark this account as the logs account, used to aggregate all AWS Config and CloudTrail data.
+      is_logs_account = true
+    },
+    security = {
+      email = "root-accounts+security@acme.com"
+    },
+    shared-services = {
+      email = "root-accounts+shared-services@acme.com"
+    },
+    dev = {
+      email = "root-accounts+dev@acme.com"
+    },
+    stage = {
+      email = "root-accounts+stage@acme.com"
+    },
+    prod = {
+      email = "root-accounts+prod@acme.com"
+    }
+  }
+
+  # The IAM users to create in this account. Since this is the root account, you should only create IAM users for a
+  # small handful of trusted admins.
+  #
+  # NOTE: Make sure to include the IAM user you created manually here! We'll import the user into Terraform state in
+  # the next step of this guide, allowing you to manage this user as code going forward.
+  users = {
+    alice = {
+      groups               = ["support"]
+      pgp_key              = "keybase:alice"
+      create_login_profile = true
+      create_access_keys   = false
+    },
+    bob = {
+      groups               = ["billing"]
+      pgp_key              = "keybase:bob"
+      create_login_profile = true
+      create_access_keys   = false
+    }
+  }
+
+  ################################
+  # Parameters for AWS Config
+  ################################
+  # Send Config logs to the common S3 bucket.
+  config_s3_bucket_name = local.config_s3_bucket_name
+
+  ################################
+  # Parameters for CloudTrail
+  ################################
+
+  # Send CloudTrail logs to the common S3 bucket.
+  cloudtrail_s3_bucket_name = local.cloudtrail_s3_bucket_name
+
+  # The ARN is a key alias, not a key ID. This variable prevents a perpetual diff when using an alias.
+  cloudtrail_kms_key_arn_is_alias = true
+
+  ##################################
+  # Cross-account IAM role permissions
+  ##################################
+
+  # By granting access to the root ARN of the Security account in each of the roles below,
+  # we allow administrators to further delegate access to other IAM entities
+
+  # Assuming the developers role will grant access to these services.
+  dev_permitted_services = [
+    "ec2",
+    "ecs",
+    "lambda",
+    "rds",
+    "elasticache",
+    "route53",
+  ]
+
+  # Assuming the auto-deploy role will grant access to these services.
+  auto_deploy_permissions = [
+    "iam:GetRole",
+    "iam:GetRolePolicy",
+  ]
+}
+----
+
+The example code above does the following:
+
+. **Create 6 child AWS accounts**. These accounts are described in more detail in the https://www.gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/#child_accounts[How to configure a production-grade AWS account structure using Gruntwork AWS Landing Zone child accounts section].
+
+. **Associate an email address with each of the child accounts**. This will be the email address for the root user of
+each account and AWS requires that the root user's email address is _globally_ unique, so it cannot be the email
+address you used for the root account or any of the other child accounts. You'll have to either create multiple email
+accounts in your company's email system, or, if your company uses Gmail (perhaps as part of G Suite), you can take
+advantage of the fact that https://gmail.googleblog.com/2008/03/2-hidden-ways-to-get-more-from-your.html[Gmail
+  ignores everything after a plus sign in an email address], so that while AWS will see
+`root-accounts+security@acme.com`, `root-accounts+shared@acme.com`, and
+`root-accounts+dev@acme.com` as three unique email addresses, Gmail will see them all as the same email
+address, `root-accounts@acme.com`.
+
+. **Mark one of the child accounts as a logs account**. We set `is_logs_account = true` on one of the child accounts
+to indicate it is the logs account where we will aggregate AWS Config, CloudTrail, IAM Access Analyzer and Security Hub data from all the other accounts.
+The `account-baseline-root` module will automatically create an S3 bucket for AWS Config and an S3 bucket and KMS CMK
+= for CloudTrail in this account and configure the root account to send all the AWS Config and CloudTrail data to these
+S3 buckets. Later on, you'll configure all the other accounts to send their data to these S3 buckets too.
+
+. **Create IAM groups**. By default, `account-baseline-root` will **not** create a `full-access` IAM group as CIS requirement 1.16 guides. It will create a `support` and a `billing` IAM group (for the support and finance teams).
+
+. **Create IAM users**. For this example, we create `alice` and `bob`, adding `alice` to the `full-access`
+IAM group and `bob` to the `billing` IAM group. _Note_: your own IAM user (the one you created manually) should be
+in the `users` list; we'll use the `import` command to put this user under Terraform management shortly.
+
+. **Generate a password for each user**. We encrypt this password with that user’s PGP key from Keybase (we’ll come
+back to how to handle the passwords shortly).
+
+Pull in the https://www.terraform.io/docs/backends/[backend] settings from a root `terragrunt.hcl` file that you
+`include` in each child `terragrunt.hcl`:
+
+.infrastructure-live/root/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
 include {
   path = find_in_parent_folders()
 }
 ----
 
-You can test this by simply running `terragrunt apply`. This will pull the `iam-password-policy` compliance module and apply it using the credentials you have defined in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. When you're satisfied with the configuration, follow the merge process described in <<merge_release_terragrunt_wrapper>>.
+Next, you need to authenticate as your IAM user in the root account. There are
+https://blog.gruntwork.io/a-comprehensive-guide-to-authenticating-to-aws-on-the-command-line-63656a686799[multiple ways to authenticate to AWS on the CLI];
+in this guide, we'll use the open source tool https://github.com/99designs/aws-vault[aws-vault].
+https://github.com/99designs/aws-vault#installing[Install aws-vault] and add to it the Access Keys you saved earlier
+from your IAM user:
 
-See also the
-link:https://github.com/gruntwork-io/cis-compliance-aws/tree/master/examples/iam-password-policy/terragrunt[terragrunt
-usage example].
+[source,bash]
+----
+$ aws-vault add root-iam-user
+Enter Access Key Id: XXXXXXXXXXXX
+Enter Secret Key: YYYYYYYYYYYY
+----
 
+You should also enable MFA for the IAM user (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_mfa_enable_virtual.html)[see the AWS docs on enabling a virtual MFA device]) and add the configuration to your profile as follows:
+[source,bash]
+----
+mfa_serial=arn:aws:iam::${local.accounts.root}:mfa/<YOUR_IAM_USER>
+----
 
-[[saml_authentication]]
-=== Steps for authentication via SAML
-If you're unfamiliar with SAML authentication and identity providers, start with the
-link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/#federated-authentication[federated
-authentication section] of the Gruntwork production-grade AWS account structure guide. You may also find the
-link:https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_saml.html#CreatingSAML-configuring-role[AWS
-SAML-based Federation documentation] to be helpful. Once you select an IdP, populate it with users and follow
-the provider's documentation to configure SAML with AWS. If you use SAML authentication alone, with no IAM users, the
-account will immediately be compliant with several of the Benchmark recommendations!
+Next, https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html[install the AWS CLI], and check that
+authentication is working:
 
-Once the IdP is ready, proceed with the steps below.
+[source,bash]
+----
+aws-vault exec root-iam-user -- aws sts get-caller-identity
+----
 
-Set up IAM roles for SAML::
-Use the link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/saml-iam-roles/README.adoc[`saml-iam-roles`
-wrapper module] to configure a compliant-set of IAM roles and policies by following the pattern outlined in <<wrapper_code>>. The module creates a minimal, best
-practices set of of IAM roles that may be assumed from the SAML provider. Tweak the `vars.tf` according to
-your needs.
+You should get JSON output with information about your IAM user:
 
-Enable MFA in the IdP::
-Ensure that MFA is configured for all AWS users in your IdP. Strictly speaking, MFA in the IdP is not
-required for compliance with the Benchmark. However, the intent of the Benchmark requirement is that all AWS
-users should have MFA, and we strongly advise this practice.
+[source,json]
+----
+{
+  "UserId": "AIDAXXXXXXXXXXXX",
+  "Account": "${local.accounts.root}",
+  "Arn": "arn:aws:iam::${local.accounts.root}:user/<YOUR_IAM_USER>"
+}
+----
 
-Create an IAM group for access to support::
-Use the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/iam-groups/README.adoc[`iam-groups`
-wrapper module] to create a standardized set of IAM groups by following the pattern outlined in <<wrapper_code>>. The module will create a group called `support`
-with the `AWSSupportAccess` managed policy attached. Customize the variables in the module to create only the
-groups you want.
+You're now almost ready to deploy the `account-baseline` module in the root account. But first, you may need to import
+some existing resources.
 
-Use the IAM admin role for administration::
-To ensure compliance with recommendation 1.22, the `saml-iam-roles` wrapper module does not create any roles
-with explicit administrator (`+*:*+`) permissions. Instead, to grant "effective" administrator access to a
-SAML user, use the `allow-iam-admin-access-from-saml` role. Users that assume this role have the ability to
-grant, revoke, and update IAM permissions as needed. From a privileges standpoint, this is the same as full
-administrator access, so be judicious with this permission.
+=== Import existing resources from the root account into Terraform state
 
-If you need to provision IAM users in addition to SAML, proceed with <<iam_user_authentication>>. Otherwise,
-continue with <<iam_roles_for_instances>>.
+Before applying the security baseline to the root account, we need to import any existing resources—including the IAM
+user you created manually earlier—into Terraform state, so that Terraform manages those existing resources instead of
+trying to create totally new ones. You can do this using the
+https://www.terraform.io/docs/import/index.html[`import` command], which uses the format:
 
-[[iam_user_authentication]]
-=== Steps for authentication via IAM users
-If you're new to IAM, refer to the
-link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/#aws-account[Core
-concepts section] of the production-grade AWS account structure guide. Once you're familiar with IAM, proceed
-with the following configuration steps:
+[source,bash]
+----
+terraform import <ADDRESS> <ID>
+----
 
-Create cross-account roles::
-If you're using multiple AWS accounts, the best way to set up access to each account is to create a set of
-roles that can be assumed from a central account using the
-link:https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html[AssumeRole] feature. This way you
-only need to create IAM users in the central account rather than in each account individually . You can create
-roles in your sub accounts using the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/cross-account-iam-roles/README.adoc[`cross-account-iam-roles`
-wrapper module] and the pattern outlined in <<wrapper_code>>.
+Where `<ADDRESS>` is the https://www.terraform.io/docs/internals/resource-addressing.html[address] of the Terraform
+resource you're importing and `<ID>` is a resource-specific identifier (e.g., for `aws_instance`, it's the instance ID,
+whereas for `aws_lb`, it's the load balancer's name—check the docs for the resource to find out what to use).
 
-Refer to the
-link:https://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/#iam-roles[IAM
-roles] section of the production-grade AWS account structure guide to learn more about cross-account roles.
+Let's import the IAM user you created manually in the root account. IAM users are managed using the
+`aws_iam_user` resource, and the
+https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user#import[documentation for that
+resource] tells us to use the user's `name` as the `<ID>`; we'll assume for this example that your IAM user's name was
+`alice`, who is already one of the entries in the `users` variable in `terragrunt.hcl`. So now we need the `<ADDRESS>`.
+An easy way to get it is to run `plan`:
 
-Create IAM groups::
-Next, create a compliant set of IAM groups with the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/iam-groups/README.adoc[`iam-groups`
-wrapper module] by following the pattern outlined in <<wrapper_code>>. If you're using multiple AWS accounts, add the roles created in the previous step to the
-`iam_groups_for_cross_account_access` list.
+[source,bash]
+----
+cd infrastructure-live/root/_global/account-baseline
+aws-vault exec root-iam-user -- terragrunt plan
+----
 
-Create IAM users::
-Now use the
-link:https://github.com/gruntwork-io/module-security/blob/master/modules/iam-users/README.md[`iam-users`
-core module] to create users and add them to the groups created in the previous step. Follow the pattern outlined in
-<<wrapper_code>> to use the `iam-users` module, even though there isn't a wrapper module for `iam-users` because there isn't anything particular needed to reach
-compliance.
+You should get a whole bunch of log output, including something that looks like this:
 
-If you are using multiple AWS accounts, create users in a central AWS account that you wish to use for
-authentication. For example, you might use a "security" account for authentication, and use the previously
-created cross-account roles and associated IAM groups to enable users to use AssumeRole to access other
-accounts (e.g. dev, stage, and production) where your applications run.
+----
+------------------------------------------------------------------------
 
-(Optional) Create custom IAM groups or roles::
-If you need to create customized IAM groups and/or roles, use the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/custom-iam-entity/README.adoc[`custom-iam-entity`
-wrapper module]. You can use this module to attach managed policies to roles and groups, and to require that MFA is in use. Refer to the link:https://github.com/gruntwork-io/module-security/blob/master/examples/custom-iam-entity/README.md[example usage].
+An execution plan has been generated and is shown below.
+Resource actions are indicated with the following symbols:
+  + create
+ <= read (data resources)
+
+Terraform will perform the following actions:
+
+# ... (ommitting lots of log output for simplicity) ...
+
+# module.root_baseline.module.iam_users.aws_iam_user.user["alice"] will be created
+  + resource "aws_iam_user" "user" {
+      + arn           = (known after apply)
+      + id            = (known after apply)
+      + name          = "alice"
+      + path          = "/"
+      + unique_id     = (known after apply)
+    }
+
+# ... (ommitting lots of log output for simplicity) ...
+
+Plan: 160 to add, 0 to change, 0 to destroy.
+
+------------------------------------------------------------------------
+
+Note: You didn't specify an "-out" parameter to save this plan, so Terraform
+can't guarantee that exactly these actions will be performed if
+"terraform apply" is subsequently run.
+----
+
+This `plan` output is telling you that Terraform will create a bunch of resources, including the `aws_iam_user` named
+`alice`. Of course, this user already exists, so we want to `import` the user rather than create it again. The text
+next to the `#` gives you the `<ADDRESS>` to use:
+
+----
+# module.root_baseline.module.iam_users.aws_iam_user.user["alice"] will be created
+----
+
+So the `<ADDRESS>` you want is `module.root_baseline.module.iam_users.aws_iam_user.user["alice"]`. Now, normally, you'd
+run `import` right away, but due two Terraform bugs, https://github.com/hashicorp/terraform/issues/13018[#13018] and
+https://github.com/hashicorp/terraform/issues/26211[#26211], `import` doesn't work on certain types of modules—namely,
+those with nested `provider` blocks that use dynamic data—and will produce an error like `unknown variable accessed:
+var.region in:`. One of these bugs has been open for over 3 years, so we built a workaround for it in Terragrunt: the
+https://terragrunt.gruntwork.io/docs/reference/cli-options/#aws-provider-patch[`aws-provider-patch` command].
+
+The idea behind the workaround is to temporarily hard-code the dynamic data in nested `provider` blocks. In particular,
+we need to temporarily hard-code some of the `region` and `role_arn` parameters of the nested `provider` blocks used by
+`account-baseline-root` as follows:
+
+[source,bash]
+----
+terragrunt aws-provider-patch \
+  --terragrunt-override-attr region="${local.aws_region}" \
+  --terragrunt-override-attr assume_role.role_arn=""
+----
+
+_Note: You can use any region you want for the `region` parameter. It's just temporary. However, `role_arn` must be set
+to an empty string or Terraform will complain._
+
+After running this command, you can finally import your IAM user:
+
+[source,bash]
+----
+aws-vault exec root-iam-user -- terragrunt import \
+  'module.root_baseline.module.iam_users.aws_iam_user.user["alice"]' \
+  'alice'
+----
+
+You should see log output that looks something like this:
+
+----
+[terragrunt] 2021/05/13 14:19:16 Running command: terraform import module.root_baseline.module.iam_users.aws_iam_user.user["alice"] alice
+module.root_baseline.module.iam_users.aws_iam_user.user["alice"]: Importing from ID "alice"...
+module.root_baseline.module.iam_users.aws_iam_user.user["alice"]: Import prepared!
+  Prepared aws_iam_user for import
+module.root_baseline.module.iam_users.aws_iam_user.user["alice"]: Refreshing state... [id=alice]
+
+Import successful!
+
+The resources that were imported are shown above. These resources are now in
+your Terraform state and will henceforth be managed by Terraform.
+----
+
+You'll now be able to manage that IAM user as code going forward!
+
+If you created other resources manually in the root account, you may want to `import` them too, so you can manage
+everything as code, and so that Terraform doesn't try to create any duplicate resources.
+
+Once you're done importing, you'll want to undo the `aws-provider-patch` workaround. The easiest way to do that is to
+delete the `.terraform` or `.terragrunt-cache` folders to remove any locally cached modules, as they would've been
+modified by the `aws-provider-patch` command.
+
+[source,bash]
+----
+rm -rf .terragrunt-cache
+----
+
+[[apply_account_baseline_root]]
+==== Apply the `account-baseline-root` baseline to the root account
+
+You're now ready to apply the security baseline to the root account. You should be authenticated as the same IAM user
+in the root account as in the previous two sections. To apply the security baseline, you run `terragrunt apply`:
+
+[source,bash]
+----
+cd infrastructure-live/root/_global/account-baseline
+aws-vault exec root-iam-user -- terragrunt apply
+----
+
+[.exceptional]
+IMPORTANT: On some operating systems, such as MacOS, you may also need to increase your open files limit to avoid "pipe: too many open files" errors by running: `ulimit -n 1024`.
+
+Once `apply` completes, you should see output variables with all of your account IDs, the name of the AWS Config S3
+bucket, the name of the CloudTrail S3 bucket, and the ARN of the CloudTrail KMS key:
+
+[source,hcl]
+----
+# (this output has been edited to be easier to read)
+child_accounts = {
+  "dev" = {
+    "email" = "root-accounts+dev@acme.com"
+    "id" = "<DEV_ACCOUNT_ID>"
+    # (...)
+  }
+  "logs" = {
+    "email" = "root-accounts+logs@acme.com"
+    "id" = "<LOGS_ACCOUNT_ID>"
+    # (...)
+  }
+  "prod" = {
+    "email" = "root-accounts+prod@acme.com"
+    "id" = "<PROD_ACCOUNT_ID>"
+    # (...)
+  }
+  "security" = {
+    "email" = "root-accounts+security@acme.com"
+    "id" = "<SECURITY_ACCOUNT_ID>"
+    # (...)
+  }
+  "shared-services" = {
+    "email" = "root-accounts+shared-services@acme.com"
+    "id" = "<SHARED_SERVICES_ACCOUNT_ID>"
+    # (...)
+  }
+  "stage" = {
+    "email" = "root-accounts+stage@acme.com"
+    "id" = "<STAGE_ACCOUNT_ID>"
+    # (...)
+  }
+}
+cloudtrail_kms_key_arn          = "<CLOUDTRAIL_KMS_KEY_ARN>"
+cloudtrail_s3_bucket_name       = "<CLOUDTRAIL_BUCKET_NAME>"
+config_s3_bucket_name           = "<CONFIG_BUCKET_NAME>"
+cloudtrail_cloudwatch_group_arn = "<CLOUDWATCH_GROUP_ARN>"
+----
+
+If you followed the http://gruntwork.io/guides/foundations/how-to-configure-production-grade-aws-account-structure/#prepare-your-infrastructure-live-repository[steps for preparing your `infrastructure-live` repo], now you can update the `account.hcl` with the account IDs from the Terraform output! If you are instead making use of `account.hcl` files (located in each account folder (e.g., `infrastructure-live/dev`, `infrastructure-live/shared`, etc.), update them too with the
+appropriate account ID shown in the Terraform output, so they look like:
+[source,hcl]
+----
+locals {
+  account_name = "<REPLACE_WITH_NAME_OF_ACCOUNT>"
+  account_id = "<REPLACE_WITH_ID_OF_ACCOUNT>"
+}
+
+----
+
+[source,json]
+----
+{
+  "account_name": "<REPLACE_WITH_ID_OF_ACCOUNT>"
+}
+----
+
+Note that we haven't specified any region here so far. If you're following the guide on how to prepare your `infrastructure-live` repo, you might have created previously files called `region.hcl` like below:
+
+[source, hcl]
+----
+# Common variables for this region
+locals {
+  # Automatically load common variables shared across all accounts
+  common_vars = read_terragrunt_config(find_in_parent_folders("common.hcl"))
+
+  # Automatically load account-level variables
+  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+
+  aws_region   = "us-west-2"
+  state_bucket = "${local.common_vars.locals.name_prefix}-${local.account_vars.locals.account_name}-${local.aws_region}-tf-state"
+}
+----
+
+Alternatively, you can add to your locals where necessary the following line, containing your choice of AWS regions:
+
+[source, hcl]
+----
+  aws_region   = "us-west-2"
+----
+
+Similarly, you will need to use the `common.hcl` file to store some terraform output values too. We will be needing throughout the rest of this guide the following values: `cloudtrail_s3_bucket_name`, `config_s3_bucket_name`, `cloudtrail_kms_key_arn`, `cloudtrail_cloudwatch_group_arn`, and the encrypted passwords for IAM users you created:
+
+[source,hcl]
+----
+user_passwords = {
+  "alice" = "wcBMA7E6Kn/t1YPfAQgAVSXlUzumcs4UyO8E5q099YnnU="
+  "bob" = "wcBMA7E6Kn/t1YPfAQgACgbdb1mYtQx7EL4hnVWtYAi="
+}
+----
+
+Send the encrypted password to each user, along with their user name, and the IAM user sign-in URL for the root account.
+Each user can then decrypt the password on their own computer (which should have their PGP key) as follows:
+
+[source,bash]
+----
+echo "<PASSWORD>" | base64 --decode | keybase pgp decrypt
+----
+
+===== Reset the root user password in each child account
+
+When creating the child accounts, you may have noticed that you provided an email address for each root user, but
+confusingly, not a password. So how do you login as the root user then? It's not obvious, but the answer is that you
+https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys_retrieve.html#reset-root-password[reset the root user password],
+using the "Forgot your password?" prompt on the https://console.aws.amazon.com/[root user login page]. AWS will email
+you a reset link, which you can click to go to a page that will allow you to configure a password for the root user.
+Use this process to reset the password for the root user of each child account you created.
+
+===== Lock down the root user in the child accounts
+
+Once you're able to access the root user of each child account, you should follow the steps in <<lock_down_root_user>>
+for each of those child accounts—including enabling MFA and deleting the root user's access keys—and (almost) never use
+those root users again.
+
+[[apply_account_baseline_logs]]
+==== Apply the `account-baseline-app` to the logs account
+
+The next step is to configure the **logs** account, which is used to aggregate AWS Config and CloudTrail data from all the
+other accountss.
+
+Create a `terragrunt.hcl` file in `infrastructure-live` under the file path `logs/_global/account-baseline`:
+
+----
+infrastructure-live
+  └ root
+  └ logs
+    └ _global
+      └ account-baseline
+        └ terragrunt.hcl
+----
+
+Point the `source` URL in your `terragrunt.hcl` file to the `account-baseline-app` module in the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog[terraform-aws-cis-service-catalog]
+repo, setting the `ref` param to the version you require:
+
+.infrastructure-live/logs/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+terraform {
+  source = "git::git@github.com/gruntwork-io/terraform-aws-cis-service-catalog//modules/landingzone/account-baseline-app?ref=v0.22.0"
+
+  # This module deploys some resources (e.g., AWS Config) across all AWS regions, each of which needs its own provider,
+  # which in Terraform means a separate process. To avoid all these processes thrashing the CPU, which leads to network
+  # connectivity issues, we limit the parallelism here.
+  extra_arguments "parallelism" {
+    commands  = get_terraform_commands_that_need_parallelism()
+    arguments = ["-parallelism=2"]
+  }
+}
+----
+
+[.exceptional]
+IMPORTANT: We **strongly** recommend setting Terraform parallelism to a low value (e.g., `-parallelism=2`), as shown above, with the `account-baseline-xxx` modules. This is because these modules deploy multi-region resources (e.g., GuardDuty, AWS Config, etc), and for each region, Terraform spins up a separate process, so if you don't limit the parallelism, it may peg all your CPU cores and lead to network connectivity errors.
+
+Set the variables for the `account-baseline-app` module in this environment in the `inputs = { ... }` block of `terragrunt.hcl`:
+
+.infrastructure-live/logs/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+locals {
+  aws_region = local.region.aws_region
+
+  # A local for more convenient access to the accounts map.
+  accounts = local.common_vars.locals.accounts
+
+  # Both buckets are created in the logs account by account-baseline-root
+  config_s3_bucket_name     = local.common_vars.locals.config_s3_bucket_name
+  cloudtrail_s3_bucket_name = local.common_vars.locals.cloudtrail_s3_bucket_name
+
+  # The Cloudtrail KMS Key is deployed at the logs account but it's value is an output from the root account.
+  cloudtrail_kms_key_arn = local.common_vars.locals.cloudtrail_kms_key_arn
+
+  # A local for convenient access to the security account root ARN.
+  security_account_root_arn = "arn:aws:iam::${local.accounts.security}:root"
+}
+
+inputs = {
+  # Prefix all resources with this name
+  name_prefix = "<SOME_UNIQUE_IDENTIFIER>-logs"
+
+ ################################
+  # Parameters for AWS Config
+  ################################
+  # Send Config logs to the common S3 bucket.
+  config_s3_bucket_name = local.config_s3_bucket_name
+
+  # Send Config logs and events to the logs account.
+  config_central_account_id = local.accounts.logs
+
+  #  This is the Logs account, so we create the SNS topic for aggregating Config logs from all accounts.
+  config_should_create_sns_topic = true
+
+  # All of the other accounts send logs to this account.
+  config_linked_accounts = [
+  for name, id in local.accounts :
+    id if name != "logs"
+  ]
+
+  ################################
+  # Parameters for CloudTrail
+  ################################
+
+  # Send CloudTrail logs to the common S3 bucket.
+  cloudtrail_s3_bucket_name = local.cloudtrail_s3_bucket_name
+
+  # All of the other accounts send logs to this account.
+  cloudtrail_allow_kms_describe_key_to_external_aws_accounts = true
+  cloudtrail_external_aws_account_ids_with_write_access = [
+  for name, id in local.accounts :
+    id if name != "logs"
+  ]
+
+  # The ARN is a key alias, not a key ID. This variable prevents a perpetual diff when using an alias.
+  cloudtrail_kms_key_arn_is_alias = true
+
+  # By granting access to the root ARN of the Logs account, we allow administrators to further delegate to access
+  # other IAM entities
+  cloudtrail_kms_key_administrator_iam_arns = ["arn:aws:iam::${local.accounts.logs}:root"]
+  cloudtrail_kms_key_user_iam_arns          = ["arn:aws:iam::${local.accounts.logs}:root"]
+
+  ##################################
+  # Benchmark SNS alarms configuration
+  ##################################
+
+  # Create the alarms topic in the logs account
+  cloudtrail_benchmark_alarm_sns_topic_already_exists = false
+  cloudtrail_benchmark_alarm_sns_topic_name           = "BenchmarkAlarmTopic"
+
+  ##################################
+  # Cross-account IAM role permissions
+  ##################################
+
+  # A role to allow users that can view and modify AWS account billing information.
+  allow_billing_access_from_other_account_arns = [local.security_account_root_arn]
+
+  # A role that allows read only access.
+  allow_read_only_access_from_other_account_arns = [local.security_account_root_arn]
+
+  # A role that allows access to support only.
+  allow_support_access_from_other_account_arns = [local.security_account_root_arn]
+
+  security_hub_associate_to_master_account_id = local.accounts.root
+}
+----
+
+The example above configures the logs account of an AWS Organization as follows:
+
+. **Aggregate CloudTrail Logs**: We configure the logs account to use the S3 bucket and KMS CMK for CloudTrail that
+were already created by `account-baseline-root`.
+
+. **Aggregate AWS Config**: We configure the logs account to use the S3 bucket for AWS Config that was already
+created by `account-baseline-root`.
+
+. **Allow access from the security account**: We configure IAM roles that IAM users in the security account will be
+able to assume to get access to the logs account.
+
+Configure your Terraform backend:
+
+.infrastructure-live/logs/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+include {
+  path = find_in_parent_folders()
+}
+----
+
+You're now going to use an IAM role to authenticate to the logs account. This IAM role is created automatically in each
+child account by `account-baseline-root` and has a default name of `OrganizationAccountAccessRole`. There are many ways
+to https://blog.gruntwork.io/a-comprehensive-guide-to-authenticating-to-aws-on-the-command-line-63656a686799[assume an IAM role on the CLI];
+for this guide, we're going to keep using `aws-vault`.
+
+Open up `~/.aws/config` and you should see a `profile` that was created automatically when you ran
+`aws-vault add root-iam-user`  earlier:
+
+[source,text]
+----
+[profile root-iam-user]
+----
+
+Add a new `profile` entry in `~/.aws/config` for your logs account that uses the `root-iam-user` as the
+`source_profile`:
+
+[source,text]
+----
+[profile logs-from-root]
+role_arn=arn:aws:iam::${local.accounts.logs}:role/OrganizationAccountAccessRole
+source_profile=root-iam-user
+----
+
+Check that you're able to authenticate to the logs account:
+
+[source,bash]
+----
+aws-vault exec logs-from-root -- aws sts get-caller-identity
+----
+
+You should see JSON output indicating that you've successfully assumed an IAM role:
+
+[source,json]
+----
+{
+  "UserId": "AIDAXXXXXXXXXXXX:1111111111111111111",
+  "Account": "${local.accounts.logs}",
+  "Arn": "arn:aws:sts::${local.accounts.logs}:assumed-role/OrganizationAccountAccessRole/1111111111111111111"
+}
+----
+
+You're now ready to deploy the `account-baseline-app` in the logs account by running `terragrunt apply`:
+
+[source,bash]
+----
+cd infrastructure-live/logs/_global/account-baseline
+aws-vault exec logs-from-root -- terragrunt apply
+----
+
+[.exceptional]
+IMPORTANT: On some operating systems, such as MacOS, you may also need to increase your open files limit to avoid "pipe: too many open files" errors by running: `ulimit -n 1024`.
+
+[[apply_account_baseline_security]]
+==== Apply the `account-baseline-security` to the security account
+
+Now that your logs accounts is fully configured, you need to apply the security baseline to the security account, which
+is where all your IAM users and groups will be defined and managed.
+
+Create a `terragrunt.hcl` file in `infrastructure-live` under the file path `security/_global/account-baseline`:
+
+----
+infrastructure-live
+  └ root
+  └ logs
+  └ security
+    └ _global
+      └ account-baseline
+        └ terragrunt.hcl
+----
+
+Point the `source` URL in your `terragrunt.hcl` file to the `account-baseline-security` module in the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog[terraform-aws-cis-service-catalog]
+repo, setting the `ref` param to the version you require:
+
+.infrastructure-live/security/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+terraform {
+  source = "git::git@github.com/gruntwork-io/terraform-aws-cis-service-catalog//modules/landingzone/account-baseline-security?ref=v0.22.0"
+
+  # This module deploys some resources (e.g., AWS Config) across all AWS regions, each of which needs its own provider,
+  # which in Terraform means a separate process. To avoid all these processes thrashing the CPU, which leads to network
+  # connectivity issues, we limit the parallelism here.
+  extra_arguments "parallelism" {
+    commands  = get_terraform_commands_that_need_parallelism()
+    arguments = ["-parallelism=2"]
+  }
+}
+----
+
+[.exceptional]
+IMPORTANT: We **strongly** recommend setting Terraform parallelism to a low value (e.g., `-parallelism=2`), as shown above, with the `account-baseline-xxx` modules. This is because these modules deploy multi-region resources (e.g., GuardDuty, AWS Config, etc), and for each region, Terraform spins up a separate process, so if you don't limit the parallelism, it may peg all your CPU cores and lead to network connectivity errors.
+
+Set the variables for the `account-baseline-security` module in this environment in the `inputs = { ... }` block of `terragrunt.hcl`:
+
+.infrastructure-live/security/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+locals {
+  aws_region = local.region.aws_region
+
+  # A local for more convenient access to the accounts map.
+  accounts = local.common_vars.locals.accounts
+
+  # Both buckets are created in the logs account by account-baseline-root
+  config_s3_bucket_name     = local.common_vars.locals.config_s3_bucket_name
+  cloudtrail_s3_bucket_name = local.common_vars.locals.cloudtrail_s3_bucket_name
+
+  # The Cloudtrail KMS Key is deployed at the logs account but it's value is an output from the root account.
+  cloudtrail_kms_key_arn = local.common_vars.locals.cloudtrail_kms_key_arn
+
+  # A local for convenient access to the security account root ARN.
+  security_account_root_arn = "arn:aws:iam::${local.accounts.security}:root"
+}
+input = {
+  # Prefix all resources with this name
+  name_prefix = "<SOME_UNIQUE_IDENTIFIER>-security"
+
+  ################################
+  # Parameters for AWS Config
+  ################################
+  # Send Config logs to the common S3 bucket.
+  config_s3_bucket_name = local.config_s3_bucket_name
+
+  # Send Config logs and events to the logs account.
+  config_central_account_id = local.accounts.logs
+
+  # This account sends logs to the Logs account.
+  config_aggregate_config_data_in_external_account = true
+
+  # The ID of the Logs account.
+  config_central_account_id = local.accounts.logs
+
+  ################################
+  # Parameters for CloudTrail
+  ################################
+
+  # Send CloudTrail logs to the common S3 bucket.
+  cloudtrail_s3_bucket_name = local.cloudtrail_s3_bucket_name
+
+  # The CloudTrail bucket is created in the logs account, so don't create it here.
+  cloudtrail_s3_bucket_already_exists = true
+
+  # Encrypt CloudTrail logs using a common KMS key.
+  cloudtrail_kms_key_arn = local.cloudtrail_kms_key_arn
+
+  # The ARN is a key alias, not a key ID. This variable prevents a perpetual diff when using an alias.
+  cloudtrail_kms_key_arn_is_alias = true
+
+  ##################################
+  # Benchmark SNS alarms configuration
+  ##################################
+
+  # The ARN of an SNS topic for sending alarms about CIS Benchmark compliance issues.
+  # The topic exists in the logs account
+  cloudtrail_benchmark_alarm_sns_topic_arn = "arn:aws:sns:${local.aws_region}:${local.accounts.logs}:BenchmarkAlarmTopic"
+  ##################################
+  # Cross-account IAM role permissions
+  ##################################
+
+  # Create groups that allow IAM users in this account to assume roles in your other AWS accounts.
+  iam_groups_for_cross_account_access = local.cross_account_groups.cross_account_groups
+
+  # Allow these accounts to have read access to IAM groups and the public SSH keys of users in the group.
+  allow_ssh_grunt_access_from_other_account_arns = [
+    for name, id in local.accounts :
+      "arn:aws:iam::${id}:root" if name != "security"
+  ]
+
+  # A list of account root ARNs that should be able to assume the auto deploy role.
+  allow_auto_deploy_from_other_account_arns = [
+    # External CI/CD systems may use an IAM user in the security account to perform deployments.
+    "arn:aws:iam::${local.accounts.security}:root",
+
+    # The shared account contains automation and infrastructure tools, such as CI/CD systems.
+    "arn:aws:iam::${local.accounts.shared}:root",
+  ]
+  auto_deploy_permissions = [
+    "iam:GetRole",
+    "iam:GetRolePolicy",
+  ]
+
+  # IAM users
+  users = {
+    alice = {
+      groups               = ["user-self-mgmt", "ssh-sudo-users"]
+      pgp_key              = "keybase:alice_on_keybase"
+      create_login_profile = true
+      create_access_keys   = false
+    }
+
+    bob = {
+      groups               = ["user-self-mgmt", "_account.prod-read-only"]
+      pgp_key              = "keybase:bob_on_keybase"
+      create_login_profile = true
+      create_access_keys   = false
+    }
+  }
+
+  security_hub_associate_to_master_account_id = local.accounts.root
+}
+----
+
+The code above does the following:
+
+. **Enable Guard Duty**. We've configured AWS Guard Duty for all enabled regions in compliance with CIS.
+
+. **Enable CloudTrail**. We've configured CloudTrail across all enabled regions to use the S3 bucket and KMS CMK in the logs account.
+
+. **Enable AWS Config**. We've configured AWS Config for all enabled regions and set it up to use the S3 bucket in the logs account.
+
+. **Create IAM groups**. We've created IAM groups, both for permissions within the security account (e.g.,
+`iam-admin` grants IAM admin permissions in the security account) and for permissions in other accounts (e.g.,
+`ssh-grunt-users` enables users to ssh into an EC2 instance running `ssh-grunt` in a any AWS Account).
+
+. **Create IAM users**. The example above creates IAM users for `alice`, `bob` and assigns them to
+the various IAM groups. You should create an IAM user for yourself in the `full-access` group, plus IAM users for the
+rest of your team in the appropriate groups. Like the root account, the code will also generate a password for each
+user and encrypt it with that user’s PGP key from Keybase (see below for how to handle the passwords).
+
+. **Create IAM Cross Account IAM roles**. We've configured IAM cross account IAM roles that will allow you to authenticate using the IAM users and roles in other AWS Accounts that have been configured with the Landing Zone setup shown in this guide.
+
+. **Create IAM User Password Policy**. We've configured the IAM user password policy to be compliant with CIS 1.3.
+
+. **Create a function to cleanup expired TLS certificates**. We've setup a lambda function to monitor your SSL/TLS certificates and clean them up when they've expired. This is enforced by CIS requirement 1.19.
+
+. **Enable Security Hub**. We've enabled Security Hub across all enabled regions. For this feature to work, the `master` Security Hub account (usually the Account that has the AWS Organizations, in this case `root`) will have to invite the `members` accounts, and the `members` accounts also have to accept the invitation. This is currently done programmatically, not via `terraform`.
+
+Configure your Terraform backend:
+
+.infrastructure-live/security/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+include {
+  path = find_in_parent_folders()
+}
+----
+
+Just as with the logs account, you're going to use the `OrganizationAccountAccessRole` IAM role created by
+`account-baseline-root` to authenticate to the security account. There are many ways to
+https://blog.gruntwork.io/a-comprehensive-guide-to-authenticating-to-aws-on-the-command-line-63656a686799[assume an IAM role on the CLI];
+for this guide, we're going to keep using `aws-vault`.
+
+Add a new `profile` entry in `~/.aws/config` for your security account that uses the `root-iam-user` as the
+`source_profile`:
+
+[source,text]
+----
+[profile security-from-root]
+role_arn=arn:aws:iam::${local.accounts.security}:role/OrganizationAccountAccessRole
+source_profile=root-iam-user
+----
+
+Check that you're able to authenticate to the security account:
+
+[source,bash]
+----
+aws-vault exec security-from-root -- aws sts get-caller-identity
+----
+
+You should see JSON output indicating that you've successfully assumed an IAM role:
+
+[source,json]
+----
+{
+  "UserId": "AIDAXXXXXXXXXXXX:1111111111111111111",
+  "Account": "${local.accounts.security}",
+  "Arn": "arn:aws:sts::${local.accounts.security}:assumed-role/OrganizationAccountAccessRole/1111111111111111111"
+}
+----
+
+You're now ready to deploy the `account-baseline` module in the security account by running `terragrunt apply`:
+
+[source,bash]
+----
+cd infrastructure-live/security/_global/account-baseline
+aws-vault exec security-from-root -- terragrunt apply
+----
+
+[.exceptional]
+IMPORTANT: On some operating systems, such as MacOS, you may also need to increase your open files limit to avoid "pipe: too many open files" errors by running: `ulimit -n 1024`.
+
+When `apply` finishes, the module will output the encrypted passwords for the users defined above. Send the encrypted
+password to each user, along with their user name, and the IAM user sign-in URL for the account. Each user can then
+decrypt the password on their own computer (which should have their PGP key) as follows:
+
+[source,bash]
+----
+echo "<PASSWORD>" | base64 --decode | keybase pgp decrypt
+----
+
+==== Apply the `account-baseline-app` to the other child accounts
+
+Now that your **security** account is fully configured, you need to apply the security baseline to the remaining child
+accounts (e.g., `dev`, `stage`, `prod`, `shared-services`). Feel free to adjust this as necessary based on the accounts your
+company needs.
+
+Create `terragrunt.hcl` files in `infrastructure-live` under the file paths `<ACCOUNT>/_global/account-baseline`,
+where `<ACCOUNT>` is one of these other child accounts, such as `dev`, `stage`, `prod`, and `shared-services`. In the rest of
+this example, we’ll look solely at the stage account, but make sure you follow the analogous steps for EACH of your
+child accounts.
+
+----
+infrastructure-live
+  └ root
+  └ logs
+  └ security
+  └ stage
+    └ _global
+      └ account-baseline
+        └ terragrunt.hcl
+----
+
+Point the `source` URL in your `terragrunt.hcl` file to the `account-baseline-app` module in the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog[terraform-aws-cis-service-catalog]
+repo, setting the `ref` param to the version you require:
+
+.infrastructure-live/stage/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+terraform {
+  source = "git::git@github.com/gruntwork-io/terraform-aws-cis-service-catalog//modules/landingzone/account-baseline-app?ref=v0.22.0"
+
+  # This module deploys some resources (e.g., AWS Config) across all AWS regions, each of which needs its own provider,
+  # which in Terraform means a separate process. To avoid all these processes thrashing the CPU, which leads to network
+  # connectivity issues, we limit the parallelism here.
+  extra_arguments "parallelism" {
+    commands  = get_terraform_commands_that_need_parallelism()
+    arguments = ["-parallelism=2"]
+  }
+}
+----
+
+[.exceptional]
+IMPORTANT: We **strongly** recommend setting Terraform parallelism to a low value (e.g., `-parallelism=2`), as shown above, with the `account-baseline-xxx` modules. This is because these modules deploy multi-region resources (e.g., GuardDuty, AWS Config, etc), and for each region, Terraform spins up a separate process, so if you don't limit the parallelism, it may peg all your CPU cores and lead to network connectivity errors.
+
+Set the variables for the `account-baseline-app` module in this environment in the `inputs = { ... }` block of `terragrunt.hcl`:
+
+.infrastructure-live/stage/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+locals {
+  aws_region = local.region.aws_region
+
+  # A local for more convenient access to the accounts map.
+  accounts = local.common_vars.locals.accounts
+
+  # Both buckets are created in the logs account by account-baseline-root
+  config_s3_bucket_name     = local.common_vars.locals.config_s3_bucket_name
+  cloudtrail_s3_bucket_name = local.common_vars.locals.cloudtrail_s3_bucket_name
+
+  # The Cloudtrail KMS Key is deployed at the logs account but it's value is an output from the root account.
+  cloudtrail_kms_key_arn = local.common_vars.locals.cloudtrail_kms_key_arn
+
+  # A local for convenient access to the security account root ARN.
+  security_account_root_arn = "arn:aws:iam::${local.accounts.security}:root"
+}
+
+inputs = {
+  # Prefix all resources with this name
+  name_prefix = "<SOME_UNIQUE_IDENTIFIER>-logs"
+
+ ################################
+  # Parameters for AWS Config
+  ################################
+  # Send Config logs to the common S3 bucket.
+  config_s3_bucket_name = local.config_s3_bucket_name
+
+  # Send Config logs and events to the logs account.
+  config_central_account_id = local.accounts.logs
+
+  # This account sends logs to the Logs account.
+  config_aggregate_config_data_in_external_account = true
+
+  # The ID of the Logs account.
+  config_central_account_id = local.accounts.logs
+
+  ################################
+  # Parameters for CloudTrail
+  ################################
+
+  # Send CloudTrail logs to the common S3 bucket.
+  cloudtrail_s3_bucket_name = local.cloudtrail_s3_bucket_name
+
+  # Encrypt CloudTrail logs using a common KMS key.
+  cloudtrail_kms_key_arn = local.cloudtrail_kms_key_arn
+
+  # The ARN is a key alias, not a key ID. This variable prevents a perpetual diff when using an alias.
+  cloudtrail_kms_key_arn_is_alias = true
+  ##################################
+  # Benchmark SNS alarms configuration
+  ##################################
+
+  # The ARN of an SNS topic for sending alarms about CIS Benchmark compliance issues.
+  # The topic exists in the logs account
+  cloudtrail_benchmark_alarm_sns_topic_arn = "arn:aws:sns:${local.aws_region}:${local.accounts.logs}:BenchmarkAlarmTopic"
+
+  ##################################
+  # Cross-account IAM role permissions
+  ##################################
+  # A role to allow users that can view and modify AWS account billing information.
+  allow_billing_access_from_other_account_arns = [local.security_account_root_arn]
+
+  # A role that allows read only access.
+  allow_read_only_access_from_other_account_arns = [local.security_account_root_arn]
+
+  # A role that allows access to support only.
+  allow_support_access_from_other_account_arns = [local.security_account_root_arn]
+
+  service_linked_roles = ["autoscaling.amazonaws.com"]
+
+  ##################################
+  # KMS grants
+  ##################################
+
+  # These grants allow the autoscaling service-linked role to access to the AMI encryption key so that it
+  # can launch instances from AMIs that were shared from the `shared-services` account.
+  kms_grant_regions = {
+    ami_encryption_key = local.aws_region
+  }
+  kms_grants = {
+    ami_encryption_key = {
+      kms_cmk_arn       = "arn:aws:kms:${local.aws_region}:${local.accounts.shared}:alias/ami-encryption"
+      grantee_principal = "arn:aws:iam::${local.accounts[local.account_name]}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+      granted_operations = [
+        "Encrypt",
+        "Decrypt",
+        "ReEncryptFrom",
+        "ReEncryptTo",
+        "GenerateDataKey",
+        "DescribeKey"
+      ]
+    }
+  }
+
+  security_hub_associate_to_master_account_id = local.accounts.root
+}
+----
+
+The code above does the following:
+
+. **Enable CloudTrail**. We've configured CloudTrail to use the S3 bucket and KMS CMK in the logs account.
+
+. **Enable AWS Config**. We've configured AWS Config to use the S3 bucket in the logs account.
+
+. **Configure the dev IAM role**. We create a `dev` IAM role in this account, which will get read and write access to
+the services specified in `dev_permitted_services`.
+
+. **Configure the Auto Deploy IAM role**. We also create an `auto-deploy` IAM role that can be assumed by a CI server
+in the `shared-services` account to do deployments. This role will have the permissions specified in
+`auto_deploy_permissions`.
+
+. **Configure cross-account IAM roles**. We then specify which other accounts are allowed to assume the IAM roles in
+this account. For the most part, we grant all permissions to the security account, so that by assigning users to IAM
+groups in that account, you'll be able to access IAM roles in all the other child accounts.
+
+Configure your Terraform backend:
+
+.infrastructure-live/stage/_global/account-baseline/terragrunt.hcl
+[source,hcl]
+----
+include {
+  path = find_in_parent_folders()
+}
+----
+
+Just as with the **logs** and **security** accounts, you're going to use the `OrganizationAccountAccessRole` IAM role created by
+`account-baseline-root` to authenticate to the stage account and all other child accounts. There are many ways to
+https://blog.gruntwork.io/a-comprehensive-guide-to-authenticating-to-aws-on-the-command-line-63656a686799[assume an IAM role on the CLI];
+for this guide, we're going to keep using `aws-vault`.
+
+Add a new `profile` entry in `~/.aws/config` for your stage account that uses the `root-iam-user` as the
+`source_profile`:
+
+[source,text]
+----
+[profile stage-from-root]
+role_arn=arn:aws:iam::${local.accounts.stage}:role/OrganizationAccountAccessRole
+source_profile=root-iam-user
+----
+
+Check that you're able to authenticate to the stage account:
+
+[source,bash]
+----
+aws-vault exec stage-from-root -- aws sts get-caller-identity
+----
+
+You should see JSON output indicating that you've successfully assumed an IAM role:
+
+[source,json]
+----
+{
+  "UserId": "AIDAXXXXXXXXXXXX:1111111111111111111",
+  "Account": "${local.accounts.stage}",
+  "Arn": "arn:aws:sts::${local.accounts.stage}:assumed-role/OrganizationAccountAccessRole/1111111111111111111"
+}
+----
+
+You're now ready to deploy the `account-baseline-app` in the **stage** account by running `terragrunt apply`:
+
+[source,bash]
+----
+cd infrastructure-live/stage/_global/account-baseline
+aws-vault exec stage-from-root -- terragrunt apply
+----
+
+[.exceptional]
+IMPORTANT: On some operating systems, such as MacOS, you may also need to increase your open files limit to avoid "pipe: too many open files" errors by running: `ulimit -n 1024`.
+
+.Remember to repeat this process in the other child accounts too (i.e., `dev`, `prod`, `shared-services`, etc)!
+
+**Next, try authenticating as an IAM user to the child accounts:**
+
+. Use your IAM user's user name and password (decrypted using keybase) to log into the web console of the security
+  account (remember to use the IAM user sign-in URL for the security account).
+. Follow the steps in <<lock_down_iam_users>> to lock down your IAM user in the security account. This includes
+  configuring an MFA device for your IAM user.
+. After configuring an MFA device, log out, and then log back into the security account again, this time providing your
+  MFA token. If you don't do this, attempting to assume IAM roles in other accounts won't work, as those roles require
+  an MFA token to be present.
+. Try to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-console.html[switch to a role] in
+  one of the other child accounts using the AWS Web Console. For example, authenticate as one of the IAM users in the
+  security account, and then assume the `allow-full-access-from-other-accounts` role in the dev account (you can find
+  the default list of IAM roles created in each account
+  https://github.com/gruntwork-io/module-security/tree/master/modules/cross-account-iam-roles#resources-created[here]).
+. Alternatively, you can use the `aws-vault login xxx` command to login to the AWS Web Console for any profile `xxx`
+  that you've configured in `aws-vault`. For example, `aws-vault login logs-from-root` will open up your web browser
+  and log you into the `logs` account using the `OrganizationAccountAccessRole` IAM Role.
+
+[[configure_security_hub]]
+**Configure AWS Security Hub in the root account**
+
+Next, we'll configure link:https://aws.amazon.com/security-hub/[AWS Security Hub] in the root account. AWS Security Hub
+is deployed by the account baselines in every enabled region of an AWS account to check your account link:https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards.html[for compliance]
+with the AWS CIS Foundations Benchmark. The Security Hub runs the exact audit steps specified in the Benchmark using AWS
+Config managed rules. _Note: Security Hub is not explicitly required by the Benchmark, however we suggest enabling it,
+so you can track your compliance efforts and be notified if any recommendations have not been implemented._
+
+TIP: In order to ensure the Security Hub dashboard shows a positive score, you will need to follow these link:https://gruntwork.io/guides/compliance/how-to-achieve-cis-benchmark-compliance/#identity-and-access-management-2[Manual Steps]
+to complete CIS compliance. These steps cannot be automated using AWS APIs. Additionally, in the AWS Console UI, AWS Security
+Hub will show a low security score for the CIS AWS Foundations Benchmark v1.2.0. This is due to AWS limitations on
+checking compliance standards for cross-region/cross-account rules. This does not indicate that the accounts are not in
+compliance; it is a failure of the AWS audit tool. Note also that the accounts are configured for the latest version of
+the benchmark, v1.3.0; the AWS Security Hub does not support this version at the current time.
 
 [[iam_roles_for_instances]]
-=== Use IAM roles for EC2 instances
+**Use IAM roles for EC2 instances**
 All Gruntwork modules that require AWS API access use roles rather than an IAM user with static API credentials for
 authentication. For example:
 
-* link:https://github.com/gruntwork-io/module-server/blob/master/modules/single-server/main.tf[`module-server`]
+* link:https://github.com/gruntwork-io/terraform-aws-server/blob/master/modules/single-server/main.tf[`terraform-aws-server`]
  is used to manage a single EC2 instance with an IAM role attached.
-* link:https://github.com/gruntwork-io/module-asg[`module-asg`] applies IAM roles to instances in auto-scaling
+* link:https://github.com/gruntwork-io/terraform-aws-asg[`terraform-aws-asg`] applies IAM roles to instances in auto-scaling
  group.
 * link:https://github.com/gruntwork-io/terraform-aws-eks/blob/master/modules/eks-cluster-workers/main.tf[`terraform-aws-eks`]
  uses IAM roles for EKS cluster workers.
-* link:https://github.com/gruntwork-io/module-ecs/tree/master/modules/ecs-cluster[`ecs-cluster`] creates IAM
+* link:https://github.com/gruntwork-io/terraform-aws-ecs/tree/master/modules/ecs-cluster[`ecs-cluster`] creates IAM
  roles for ECS instances
-* link:https://github.com/gruntwork-io/package-lambda/tree/master/modules/lambda[`lambda`] creates IAM
+* link:https://github.com/gruntwork-io/terraform-aws-lambda/tree/master/modules/lambda[`lambda`] creates IAM
  roles for Lambda functions
 
-Use these modules whenever possible. You should always use IAM roles in your own modules any time you need to provide access to the AWS API. Using static API credentials should be avoided whenever possible.
+Use these modules whenever possible. You should always use IAM roles in your own modules any time you need to provide
+access to the AWS API. Using static API credentials should be avoided whenever possible.
 
-[[maintain_compliance]]
-=== Maintaining compliance by following IAM best practices
+[[maintain_compliance_iam]]
+**Maintaining compliance by following IAM best practices**
 We conclude the IAM section with a few parting words of wisdom for maintaining compliance over time:
 
 . Do not attach any policies without requiring MFA.
@@ -958,129 +2226,194 @@ link:https://docs.aws.amazon.com/general/latest/gr/aws_tasks-that-require-root.h
 the use of root].  Fortunately, most of these activities are rare, so usage of the root account can be kept to
 a minimum.
 
-Next, continue with the <<configure_logging>> section.
+[[maintain_compliance_storage]]
+**Maintaining compliance by following Storage best practices**
 
-[[configure_logging]]
-=== Configure logging
+[[s3_buckets_deployment]]
+**S3 Buckets**
+To make sure your S3 buckets are compliant with the benchmark, use the
+link:https://github.com/gruntwork-io/terraform-aws-security/tree/master/modules/private-s3-bucket[`private-s3-bucket` module]
+to create and manage all of your S3 buckets. This module blocks public access and enforces encryption by default. Note
+that all Gruntwork modules that create S3 buckets use this module under the hood.
+
+You can either use the `private-s3-bucket` module in your own modules, or, if you wish to deploy a standalone S3 bucket, use the https://github.com/gruntwork-io/terraform-aws-service-catalog/blob/master/modules/data-stores/s3-bucket/[`s3-bucket` service]
+from the Gruntwork Service Catalog.
+
+[[maintain_compliance_logging]]
+**Maintaining compliance by following Logging best practices**
+
 The logging section of the Benchmark includes configurations for CloudTrail, AWS Config, KMS keys, and VPC
 flow logs.
 
-[[cloudtrail]]
-==== CloudTrail
-Use the link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/cloudtrail/README.adoc[`cloudtrail`
-wrapper module] to establish a compliant CloudTrail configuration. The wrapper module will configure CloudTrail with all
-the characteristics required by the Benchmark. Refer to the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/examples/cloudtrail/terraform/README.md[terraform]
-and
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/examples/cloudtrail/terragrunt/README.md[terragrunt]
-examples.
-
-[[aws_config]]
-==== Enable AWS Config in all regions
-Use the
-link:https://github.com/gruntwork-io/module-security/blob/master/modules/aws-config-multi-region/README.adoc[`aws-config-multi-region`
-module]
-to enable AWS Config in every region of an AWS account, along with a global configuration recorder in one region, as per
-the Benchmark recommendation.
-
-
-[[kms]]
-==== Enable key rotation for KMS keys
-Use the
-link:https://github.com/gruntwork-io/module-security/blob/master/modules/kms-master-key/README.md[`kms-master-key`
-module] to create KMS keys with key rotation enabled by default.
+[[enable_key_rotation_for_kms]]
+**Enable key rotation for KMS keys**
+To make sure your KMS keys are compliant with the benchmark, use the
+link:https://github.com/gruntwork-io/terraform-aws-security/blob/master/modules/kms-master-key/README.md[`kms-master-key` module]
+to create KMS keys with key rotation enabled by default.
 
 [[vpc_flow_logs]]
-==== Create VPC flow logs
+=== Create VPC flow logs
+
 The Benchmark recommends enabling link:https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html[VPC Flow Logs]
 for all VPCs in all regions. You can use the
-link:https://github.com/gruntwork-io/module-vpc/blob/master/modules/vpc-flow-logs/README.md[`vpc-flow-logs` core module]
-to create a flow log for a given VPC. For example, you might first create a VPC using `module-vpc`:
+link:https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/blob/master/modules/networking/vpc[`vpc` service]
+in the AWS CIS Service Catalog to create your VPCs. This service is configured for CIS compliance, and as such has VPC flow
+logs enabled. See the examples below:
 
-.infrastructure-modules/networking/vpc/myvpc/main.tf
+.infrastructure-live/root/us-east-1/prod/networking/vpc/terragrunt.hcl
 [source,hcl]
 ----
-data "aws_availability_zones" "all" {}
+# ---------------------------------------------------------------------------------------------------------------------
+# MODULE PARAMETERS
+# These are the variables we have to pass in to use the module specified in the terragrunt configuration above
+# ---------------------------------------------------------------------------------------------------------------------
+inputs = {
+  vpc_name         = "app"
+  num_nat_gateways = 1
+  cidr_block       = local.cidr_block
+  kms_key_user_iam_arns = [
+    "arn:aws:iam::${local.common_vars.locals.accounts[local.account_name]}:root",
+  ]
+  eks_cluster_names    = ["${local.name_prefix}-${local.account_name}"]
+  tag_for_use_with_eks = true
 
-module "vpc" {
-  # Replace <VERSION> with the most recent release from the https://github.com/gruntwork-io/module-vpc/releases[releases page]:
-  source = "git::git@github.com:gruntwork-io/module-vpc.git//modules/vpc-flow-logs?ref=<VERSION>"
-
-  vpc_name   = var.vpc_name
-  aws_region = var.aws_region
-
-  cidr_block             = var.cidr_block
-  num_nat_gateways       = var.num_nat_gateways
-  num_availability_zones = length(data.aws_availability_zones.all.names)
+  allow_administrative_remote_access_cidrs_public_subnets = merge(
+    {
+      for cidr in local.common_vars.locals.ip_allow_list
+      : index(local.common_vars.locals.ip_allow_list, cidr) => cidr
+    },
+    { length(local.common_vars.locals.ip_allow_list) = local.cidr_block }
+  )
 }
 ----
 
-Then create a Flow Log for the VPC:
+In here you'll still need to reference the `locals` configuration, and ensure that you're setting the right `source` to the module, so add this to your `terragrunt.hcl` file too:
 
-.infrastructure-modules/networking/vpc/myvpc/main.tf
 [source,hcl]
 ----
-module "flow_logs" {
-  source = "git::git@github.com:gruntwork-io/module-vpc.git//modules/vpc-flow-logs?ref=<VERSION>"
+# Terragrunt will copy the Terraform configurations specified by the source parameter, along with any files in the
+# working directory, into a temporary folder, and execute your Terraform commands in that folder. If you're iterating
+# locally, you can use --terragrunt-source /path/to/local/checkout/of/module to override the source parameter to a
+# local check out of the module for faster iteration.
+terraform {
+  # We're using a local file path here just so our automated tests run against the absolute latest code. However, when
+  # using these modules in your code, you should use a Git URL with a ref attribute that pins you to a specific version:
+  # source = "git::git@github.com:gruntwork-io/terraform-aws-cis-service-catalog.git//modules/networking/vpc?ref=v0.20.0"
+  source = "${get_parent_terragrunt_dir()}/../../..//modules/networking/vpc"
+}
 
-  # We refer to the VPC ID created by the module above
-  vpc_id = module.vpc.vpc_id
-  kms_key_users = var.kms_key_users
+# Include all settings from the root terragrunt.hcl file
+include {
+  path = find_in_parent_folders()
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Locals are named constants that are reusable within the configuration.
+# ---------------------------------------------------------------------------------------------------------------------
+locals {
+  # Automatically load common variables shared across all accounts
+  common_vars = read_terragrunt_config(find_in_parent_folders("common.hcl"))
+
+  # Extract the name prefix for easy access
+  name_prefix = local.common_vars.locals.name_prefix
+
+  # Automatically load account-level variables
+  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+
+  # Extract the account_name for easy access
+  account_name = local.account_vars.locals.account_name
+
+  # Automatically load region-level variables
+  region_vars = read_terragrunt_config(find_in_parent_folders("region.hcl"))
+
+  # Extract the region for easy access
+  aws_region = local.region_vars.locals.aws_region
+
+  cidr_block = local.common_vars.locals.app_vpc_cidrs[local.account_name]
 }
 ----
-
-All that's remaining is to define the parameters in a `variables.tf`:
-
-.infrastructure-modules/networking/vpc/myvpc/variables.tf
-[source,hcl]
-----
-variable "aws_region" {
-  description = "The AWS region to deploy to (e.g. us-east-1)"
-  type        = string
-}
-
-variable "vpc_name" {
-  description = "The name of the VPC to create"
-  type        = string
-}
-
-variable "kms_key_users" {
-  description = "A list of IAM user ARNs with access to the KMS key used with the VPC flow logs. Required if kms_key_arn is not defined."
-  type        = list(string)
-}
-----
-
-Refer to the flow logs
-link:https://github.com/gruntwork-io/module-vpc/blob/master/examples/vpc-flow-logs/main.tf[example code].
 
 To limit the number of flow logs, you may want to use the
 link:https://github.com/gruntwork-io/cloud-nuke[`cloud-nuke defaults-aws`] command. It will remove the default VPC from
 all regions in an account, saving you the hassle of creating flow logs in each default VPC.
 
-[[configure_monitoring]]
-=== Configure monitoring
+[[maintain_compliance_monitoring]]
+==== Maintaining compliance by following Monitoring best practices
 The Monitoring section of the Benchmark centers on a collection of
 link:https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/MonitoringLogData.html[CloudWatch Logs Metric
 Filters]. Gruntwork has simplified this section to a single module: the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/cloudwatch-logs-metric-filters/README.adoc[`cloudwatch-logs-metric
+link:https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/blob/master/modules/cloudwatch-logs-metric-filters/README.adoc[`cloudwatch-logs-metric
 -filters` wrapper module]. It will create and configure all the CloudWatch Logs metric filters necessary for
-compliance with the Benchmark. Note that when you use the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/cloudtrail/README.adoc[`cloudtrail`
-wrapper module] as recommended in <<cloudtrail>>, this module will automatically be invoked inline so that you don't
-have to do anything special to enable the metric filters on the deployed CloudTrail configuration.
+compliance with the Benchmark. Note that when you deploy the CIS account baseline modules, the CloudWatch Logs metric
+filters will be created and configured automatically, so that you don't have to do anything special to enable the metric filters on the
+deployed CloudTrail configuration.
 
 Note that you must have a subscriber on the SNS topic to be compliant. Refer to <<subscribe_sns>> for details on how to
 setup a subscriber to the SNS topics that are created.
 
-[[configure_networking]]
-=== Configure networking
-If you're using Gruntwork's link:https://github.com/gruntwork-io/module-vpc[VPC module] for your VPCs, three
-of the four recommendations in this section are already taken care of! By default, none of our modules allow
-access to ports 22 or 3389 from the world, and our architecture has a least-privileges-based routing
-configuration by default.
+[[maintain_compliance_networking]]
+==== Maintaining compliance by following Networking best practices
 
-The only necessary step here is to run the link:https://github.com/gruntwork-io/cloud-nuke[`cloud-nuke
-defaults-aws`] command to remove all default security groups from all VPCs in all regions.
+To ensure all the networking recommendations are satisfied, use the
+link:https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/tree/master/modules/networking/vpc[`vpc`] (and/or
+link:https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/tree/master/modules/networking/vpc-mgmt[`vpc-mgmt`])
+service from Gruntwork's AWS CIS Service Catalog to create all your VPCs. These services are specifically configured for
+CIS compliance, and as such they don't allow security groups to access ports 22 or 3389 from the world. In addition,
+our architecture has a least-privileges-based routing configuration by default.
+
+To meet the 5.1 recommendation, you'll need to provide values for the `allow_administrative_remote_access_*` variables
+when creating VPCs. These variables are used to create appropriate Network ACL Rules. For example, you might create a
+VPC using the `vpc` service from `terraform-aws-cis-service-catalog`:
+
+----
+infrastructure-live
+└── root
+    └── us-east-1
+        └── prod
+            └─ networking
+                └─ vpc
+                    └─ terragrunt.hcl
+----
+
+.infrastructure-modules/networking/vpc/myvpc/main.tf
+[source,hcl]
+----
+terraform { # We're using a local file path here just so our automated tests run against the absolute latest code. However, when
+  # using these modules in your code, you should use a Git URL with a ref attribute that pins you to a specific version:
+  # source = "git::git@github.com:gruntwork-io/terraform-aws-cis-service-catalog.git//modules/networking/vpc-mgmt?ref=v0.20.0"
+  source = "${get_parent_terragrunt_dir()}/../../..//modules/networking/vpc-mgmt"
+}
+----
+
+[source, hcl]
+----
+inputs = {
+  vpc_name         = "mgmt"
+  num_nat_gateways = 1
+  cidr_block       = local.cidr_block
+  kms_key_user_iam_arns = [
+    "arn:aws:iam::${local.common_vars.locals.accounts[local.account_name]}:root",
+  ]
+
+  # Next, pass values for the allow_administrative_remote_access_* variables, thus creating the NACL rules under the hood
+  allow_administrative_remote_access_cidrs_private_app_subnets         = { all_app_vpc_cidrs  = module.vpc.vpc_cidr_block }
+  allow_administrative_remote_access_cidrs_private_persistence_subnets = { all_app_vpc_cidrs  = module.vpc.vpc_cidr_block }
+
+  allow_administrative_remote_access_cidrs_public_subnets = merge(
+    {
+      for cidr in local.common_vars.locals.ip_allow_list
+      : index(local.common_vars.locals.ip_allow_list, cidr) => cidr
+    },
+    { length(local.common_vars.locals.ip_allow_list) = local.cidr_block }
+  )
+}
+----
+
+Refer to the https://github.com/gruntwork-io/terraform-aws-cis-service-catalog/tree/master/examples/for-learning-and-testing/networking/vpc/terraform[terraform-aws-cis-service-catalog]
+repo for a more comprehensive example.
+
+Finally, run the link:https://github.com/gruntwork-io/cloud-nuke[`cloud-nuke defaults-aws`] command to remove all
+default security groups from all VPCs in all regions.
 
 [[next_steps]]
 == Next steps
@@ -1090,49 +2423,47 @@ Benchmark. Now it's time to confirm that your configurations are correct and you
  +
  +
 
-Use the
-link:https://github.com/gruntwork-io/cis-compliance-aws/blob/master/modules/aws-securityhub/README.adoc[`aws-securityhub`
-module]
-to enable link:https://aws.amazon.com/security-hub/[AWS Security Hub] in every region of an AWS account to check your
-account link:https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards.html[for compliance with the
-AWS CIS Foundations Benchmark]. The Security Hub runs the exact audit steps specified in the Benchmark using AWS Config
-managed rules. By enabling the Security Hub, you can track your compliance efforts and be notified if any
-recommendations have not been implemented.
-
-
 [[traceability_matrix]]
 == Traceability matrix
 Use the table below as a quick reference to map the CIS AWS Foundations Benchmark recommendations to the
 sections above.
 
-
-[cols="^1,<10,15",format=csv]
+[cols="^1,<10,15",format=csv,separator=;]
 |===
-#,Section,Description
-1.1,<<manual_steps>>,Take manual steps to complete this recommendation
-1.2,<<configure_authentication>>,Configure authentication using SAML or IAM
-1.3,<<next_steps>>,Use the Gruntwork Security Hub module to enable AWS Security Hub to ensure that there are no unused credentials
-1.4,<<next_steps>>,Use the Gruntwork Security Hub module to enable AWS Security Hub to ensure that there are no unused access keys
-1.5-11,<<create_password_policy>>,Use the IAM password policy module
-1.12,<<next_steps>>,Use the Gruntwork Security Hub module to enable AWS Security Hub to ensure that no access key exists for the root user
-1.13,<<root_mfa>>,Manually configure MFA for the root user
-1.14,<<root_mfa>>,Use a Yubikey (or other hardware MFA) for the root user
-1.15,<<security_questions>>,Answer the security questions on the AWS account page
-1.16,<<iam_user_authentication>>,Use IAM groups and roles
-1.17,<<security_questions>>,Complete the contact details on the AWS account page
-1.18,<<security_questions>>,Complete the security contact information on the AWS account page
-1.19,<<iam_roles_for_instances>>,Use Gruntwork modules to ensure EC2 instances use roles for access
-1.20,<<iam_user_authentication>>,Use the `iam-groups` module to create a support group
-1.21,<<iam_user_authentication>>,Create IAM users with the `iam-users` module
-1.22,<<iam_user_authentication>>,Use the Gruntwork modules to create best-practices groups and roles
-2.1-2.4,<<cloudtrail>>,Use the Gruntwork CloudTrail wrapper module
-2.5,<<aws_config>>,Enable AWS Config for all regions
-2.6-2.7,<<cloudtrail>>,Use the Gruntwork CloudTrail wrapper module
-2.8,<<kms>>,Use the KMS module
-2.9,<<vpc_flow_logs>>,Use the VPC flow logs core module
-3.1-3.14,<<configure_monitoring>>,The CloudWatch Logs metrics filters wrapper module will satisfy each recommendation
-4.1,<<configure_networking>>,Use the Gruntwork VPC modules for a secure network configuration
-4.2,<<configure_networking>>,Use the Gruntwork VPC modules for a secure network configuration
-4.3,<<configure_networking>>,The cloud-nuke tool can remove all default security groups
-4.4,<<configure_networking>>,Gruntwork's VPC module creates least-privilege routing by default
+#;Section;Description
+1.1;<<security_questions>>;Complete the contact details on the AWS account page
+1.2;<<security_questions>>;Complete the security contact information on the AWS account page
+1.3;<<security_questions>>;Answer the security questions on the AWS account page
+1.4;<<configure_security_hub>>;Use the Gruntwork Security Hub module to enable AWS Security Hub to ensure you are notified if the root user has access keys set
+1.5;<<root_mfa>>;Manually configure MFA for the root user
+1.6;<<root_mfa>>;Use a Yubikey (or other hardware MFA) for the root user
+1.7;<<manual_steps>>;Take manual steps to complete this recommendation
+1.8-9;<<apply_account_baseline_security>>;Use the `account-baseline-security` module to set up the IAM password policy
+1.10;<<configure_authentication>>;Configure authentication using SAML or IAM
+1.11;<<apply_account_baseline_security>>;Use the `account-baseline-security` module to create users
+1.12;<<apply_account_baseline_root>>, <<apply_account_baseline_security>>, <<apply_account_baseline_logs>>;Use the `account-basline-*` modules to set up your accounts. This will ensure that there are no unused credentials
+1.13;<<apply_account_baseline_root>>, <<apply_account_baseline_security>>, <<apply_account_baseline_logs>>;Use the `account-basline-*` modules to set up your accounts. This will ensure that there are no extra access keys
+1.14;<<apply_account_baseline_root>>, <<apply_account_baseline_security>>, <<apply_account_baseline_logs>>;Use the `account-basline-*` modules to set up your accounts. This will ensure that there are no unused access keys
+1.15;<<apply_account_baseline_security>>;Use the `account-baseline-security` module to create users and groups
+1.16;<<apply_account_baseline_security>>;Use the `account-baseline-security` module to ensure no full-access policies are attached to any groups or users
+1.17;<<apply_account_baseline_security>>;Use the `account-baseline-security` module to create a support group
+1.18;<<iam_roles_for_instances>>;Use Gruntwork modules to ensure EC2 instances use roles for access
+1.19;<<cleanup_expired_certs>>;Use Gruntwork modules to automatically remove expired certificates from IAM
+1.20;<<s3_buckets_deployment>>;Use the `private-s3-bucket` module
+1.21;<<iam_access_analyzer>>;Use Gruntwork modules to enable IAM Access Analyzer across regions
+1.22;<<account_structure>>;Use the security AWS account as described in the Gruntwork production-grade AWS account structure
+2.1.1-2.1.2;<<s3_buckets_deployment>>;Use the `private-s3-bucket` module
+2.2.1;<<configure_ebs_encryption>>;Use Gruntwork modules to configure AWS EBS encryption
+3.1-3.4;<<apply_account_baseline_logs>>;Use the `account-baseline-*` modules to ensure Cloudtrail is enabled and configured in all regions
+3.5;<<apply_account_baseline_security>>;Use the `account-baseline-security` module to ensure AWS Config is enabled in all regions
+3.6;<<apply_account_baseline_logs>>;Use the `account-baseline-*` modules to ensure Cloudtrail S3 bucket has access logging enabled
+3.7;<<apply_account_baseline_logs>>;Use the `account-baseline-*` modules to ensure Cloudtrail logs are encrypted at rest using KMS CMKs
+3.8;<<enable_key_rotation_for_kms>>;Use the KMS module
+3.9;<<vpc_flow_logs>>;Use the Gruntwork CIS-compliant `vpc` service to provision VPCs with flow logs enabled
+3.10-3.11;<<apply_account_baseline_logs>>;Use the `account-baseline-*` modules to ensure Object-level logging is enabled for S3 buckets for read and write events
+4.1-4.15;<<maintain_compliance_monitoring>>;The CloudWatch Logs metrics filters wrapper module will satisfy each recommendation
+5.1;<<maintain_compliance_networking>>;Use the Gruntwork CIS-compliant `vpc` service to ensure there is no public remote access
+5.2;<<maintain_compliance_networking>>;Use the Gruntwork CIS-compliant `vpc` service for a secure network configuration
+5.3;<<maintain_compliance_networking>>;Use the `cloud-nuke` tool to remove all default security groups
+5.4;<<maintain_compliance_networking>>;Use the Gruntwork CIS-compliant `vpc` service to configure least-privilege routing by default
 |===
